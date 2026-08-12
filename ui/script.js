@@ -607,15 +607,15 @@ document.addEventListener('DOMContentLoaded', async function () {
 
             if (restartResponse.ok) {
                 showNotification(
-                    'Server restart initiated. The page will reload automatically in a few seconds...',
+                    'Model configuration saved. Waiting for the server to come back online...',
                     'success',
-                    10000
+                    6000
                 );
 
-                // Attempt to reload after delay
-                setTimeout(() => {
-                    window.location.reload();
-                }, 5000);
+                // Poll until the server actually answers rather than reloading on a fixed
+                // timer: loading a model takes far longer than the 5s this used to wait, so
+                // the reload landed on a server that was still starting up.
+                await waitForServerRestart(applyModelBtn, null);
             } else {
                 showNotification(
                     'Configuration saved. Please restart the server manually for changes to take effect.',
@@ -1644,6 +1644,50 @@ document.addEventListener('DOMContentLoaded', async function () {
         else if (button && enableButtonAfter && !isProcessing) button.disabled = false;
     }
 
+    /**
+     * Wait for the server to come back after a restart, then reload the page.
+     *
+     * /api/model-info only answers once startup has finished (it is served after the
+     * lifespan handler, which loads the model), so a successful response is an exact
+     * "back online" signal rather than a guess. Polling it means the user gets a real
+     * confirmation instead of being told to refresh manually and left with a button
+     * stuck in its processing state.
+     *
+     * @param {HTMLElement|null} button   control to re-enable if the wait fails
+     * @param {HTMLElement|null} statusEl element to report progress in
+     * @returns {Promise<boolean>} true if the server came back (page is reloading)
+     */
+    async function waitForServerRestart(button, statusEl) {
+        const startedAt = Date.now();
+        const timeoutMs = 180000;   // model load alone can take ~45s; be generous
+        const intervalMs = 2000;
+        // Give the process a moment to actually go down, so we don't get a response
+        // from the server we just asked to stop and declare success immediately.
+        await new Promise((r) => setTimeout(r, 3000));
+
+        while (Date.now() - startedAt < timeoutMs) {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/model-info`, { cache: 'no-store' });
+                if (res.ok) {
+                    updateConfigStatus(button, statusEl, 'Server back online. Reloading...', 'success', 0, false);
+                    showNotification('Server restarted successfully. Reloading the page...', 'success', 4000);
+                    setTimeout(() => window.location.reload(), 800);
+                    return true;
+                }
+            } catch (e) {
+                // Expected while the server is down - keep waiting.
+            }
+            const secs = Math.round((Date.now() - startedAt) / 1000);
+            updateConfigStatus(button, statusEl, `Restarting server... (${secs}s)`, 'processing', 0, false);
+            await new Promise((r) => setTimeout(r, intervalMs));
+        }
+
+        updateConfigStatus(button, statusEl, 'Server did not come back in time - reload manually.', 'error', 0, true);
+        showNotification('The server did not respond after restarting. Check its console, then reload this page.', 'error', 0);
+        if (button) button.disabled = false;
+        return false;
+    }
+
     if (saveConfigBtn && configStatus) {
         saveConfigBtn.addEventListener('click', async () => {
             const configDataToSave = {};
@@ -1738,7 +1782,11 @@ document.addEventListener('DOMContentLoaded', async function () {
                 });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.detail || 'Server responded with error on restart command');
-                showNotification("Server restart initiated. Please wait a moment for the server to come back online, then refresh the page.", "info", 10000);
+                showNotification("Server restart initiated. Waiting for it to come back online...", "info", 6000);
+                // Poll until it answers, then reload. Without this the status stays stuck on
+                // 'Attempting server restart...' and the button stays disabled forever, because
+                // only the catch branch below ever cleared them.
+                await waitForServerRestart(restartServerBtn, configStatus);
             } catch (error) {
                 showNotification(`Server restart command failed: ${error.message}`, "error");
                 updateConfigStatus(restartServerBtn, configStatus, `Restart failed.`, 'error', 5000, true);
