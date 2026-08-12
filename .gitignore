@@ -49,3 +49,6 @@ htmlcov/
 
 # Local-only scratch / notes (never committed)
 _local/
+
+# Acceptance matrix output (audio + manifest, not fixtures)
+tests/out/
