@@ -36,10 +36,24 @@ Requirements:
     - Internet connection for downloading dependencies
 """
 
+import os
+
+# Default HuggingFace Hub access to offline. All model weights this server needs are
+# already in the local cache (see model_cache / HF cache), so contacting the Hub on
+# every launch is unnecessary network dependency and, worse, a silent correctness
+# risk: chatterbox's from_pretrained() calls snapshot_download() with no revision=
+# pinned, so if the upstream repo is edited, an online run would download and start
+# using the new weights on the next restart with no visible cause. Setting this here
+# (before huggingface_hub/transformers are imported, by this process or the server.py
+# subprocess it launches, which inherits this environment) makes every launch path -
+# start.bat, start.sh, Docker, and `python start.py` directly - offline by default.
+# setdefault() means an explicitly-set HF_HUB_OFFLINE always wins; set HF_HUB_OFFLINE=0
+# to go back online temporarily, e.g. to download a model you don't have cached yet.
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
 import argparse
 import hashlib
 import json
-import os
 import platform
 import re
 import shutil

@@ -59,6 +59,15 @@ fourth model and brings the dependencies current.
 - **UI corrections:** `tts_engine.device` and `audio_output.format` are editable dropdowns rather
   than read-only text; `exaggeration` / `cfg_weight` are hidden on Turbo and Nano, which ignore
   them; and UI assets are cache-busted, so an update actually reaches the browser.
+- **Offline by default (`HF_HUB_OFFLINE=1`).** `start.py` now sets this before every launch path
+  (`start.bat`, `start.sh`, Docker, `python start.py`), so a server with cached weights starts
+  without contacting the Hub and without silently picking up an upstream repo edit on restart
+  (`from_pretrained()` pins no `revision=`). Set `HF_HUB_OFFLINE=0` to download a model you don't
+  have cached yet. See [Configuration](#-configuration) below.
+- **Streaming in the Web UI.** The "Stream (start playing sooner)" checkbox on the Generate button
+  plays audio chunk-by-chunk as it arrives instead of waiting for the whole response, then hands
+  the assembled clip to the waveform player once the stream finishes. The `/tts` `stream: true` API
+  parameter this builds on already existed; nothing in the UI used it before.
 
 See [`UPSTREAM.md`](UPSTREAM.md) for how this fork tracks its two upstreams.
 
@@ -838,6 +847,23 @@ The server relies exclusively on `config.yaml` for runtime configuration.
 
 All four are hot-swappable from the Web UI engine dropdown without a server restart. Turbo and Nano both ignore `exaggeration` and `cfg_weight`; Original and Multilingual don't support paralinguistic tags.
 
+### 🔌 Offline model loading (`HF_HUB_OFFLINE`)
+
+`start.py` sets `HF_HUB_OFFLINE=1` by default (via `os.environ.setdefault`, so an explicit value
+you set always wins) before it launches the server, on every launch path. With all required
+weights already in the local Hugging Face cache, this means:
+
+- The server starts without contacting the Hub at all — no network dependency for a normal launch.
+- Because `chatterbox`'s `from_pretrained()` calls `snapshot_download()` without pinning a
+  `revision=`, an *online* run re-checks the Hub on every start and would silently pick up new
+  weights if the upstream repo is ever edited, changing output with no visible cause. Offline mode
+  prevents that.
+
+**Set `HF_HUB_OFFLINE=0`** temporarily whenever you need to download a model you don't have cached
+yet (a new model, a new checkpoint, or a fresh installation) — otherwise `from_pretrained()` fails
+with no network access instead of downloading. `huggingface_hub` treats `1`/`ON`/`YES`/`TRUE` as
+true and `0`/`OFF`/`NO`/`FALSE` as false.
+
 ## 🔐 Security
 
 - Voice file parameters on `/tts` (`predefined_voice_id`, `reference_audio_filename`) and `/v1/audio/speech` (`voice`) are sandboxed under their configured directories using `utils.safe_resolve_within()`.
@@ -851,13 +877,13 @@ The server defaults are tuned for safety and broad compatibility. The following 
 - **BF16 inference** — set environment variable `TTS_BF16=on` (or `=auto` for "enable only if the GPU reports `is_bf16_supported()`") to convert T3 to bfloat16 and run `generate()` under autocast. Roughly 40% throughput on bf16-capable GPUs (RTX 30/40/50, A100, H100, Strix Halo). Default is `off` to preserve existing behavior on upgrade. Output is numerically slightly different from float32 but typically inaudible.
 - **Voice conditioning cache** — repeated requests against the same reference voice skip re-encoding. Cache is keyed by `(path, mtime, exaggeration)` and is automatically cleared on `reload_model()` / `/api/unload`. No config needed.
 - **Chunk size** — `chunk_size` parameter on `/tts` (50–500, default 120). Larger chunks = fewer requests but more VRAM per call. The chunker respects sentence boundaries either way.
-- **Streaming** — `stream: true` on `/tts` for long-form input (audiobooks, multi-paragraph content). See the API section above for the chunk-level caveat.
+- **Streaming** — `stream: true` on `/tts` for long-form input (audiobooks, multi-paragraph content). See the API section above for the chunk-level caveat. The Web UI exposes this as the "Stream (start playing sooner)" checkbox next to Generate.
 - **HTTPS** — set `server.ssl_certfile` and `server.ssl_keyfile` in `config.yaml` for direct HTTPS without putting a reverse proxy in front.
 
 ## ▶️ Running the Server
 
 **Important Note on Model Downloads (First Run):**
-The very first time you start the server, it needs to download the `chatterbox-tts` model files from Hugging Face Hub. This is an **automatic, one-time process** (per model version, or until your Hugging Face cache is cleared).
+The very first time you start the server, it needs to download the `chatterbox-tts` model files from Hugging Face Hub. This is an **automatic, one-time process** (per model version, or until your Hugging Face cache is cleared) — **but only if the Hub is reachable.** `start.py` defaults `HF_HUB_OFFLINE=1` (see [Offline model loading](#-offline-model-loading-hf_hub_offline) above), so a genuinely first run with nothing cached needs `HF_HUB_OFFLINE=0` set before starting, or the download will fail instead of happening automatically.
 
 *   ⏳ **Please be patient:** This download can take several minutes, depending on your internet speed and the size of the model files (typically a few gigabytes).
 *   📝 **Monitor your terminal:** You'll see progress indicators or logs related to the download. The server will only become fully operational and accessible *after* these essential model files are successfully downloaded and loaded.
