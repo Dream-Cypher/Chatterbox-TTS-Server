@@ -279,7 +279,7 @@ Refer to `requirements.txt` [1] for the complete list.
 
 ## 4. Installation and Setup
 
-This section details the **manual / advanced** installation path. For most users, the recommended path is the automated launcher (`python start.py` on any OS, or `start.bat` / `start.sh`) documented in the main [README.md](README.md#-installation-and-setup), which covers Portable Mode on Windows and all six hardware paths (CPU, NVIDIA cu121 / cu128 / cu130, AMD ROCm, AMD Strix Halo, Apple MPS). The instructions below are kept for users who prefer to manage the venv and requirements directly.
+This section details the **manual / advanced** installation path. For most users, the recommended path is the automated launcher (`python start.py` on any OS, or `start.bat` / `start.sh`) documented in the main [README.md](README.md#-installation-and-setup), which covers Portable Mode on Windows and all six hardware paths (CPU, NVIDIA cu126 / cu128 / cu130, AMD ROCm, AMD Strix Halo, Apple MPS). The instructions below are kept for users who prefer to manage the venv and requirements directly.
 
 ### 4.1 Prerequisites Checklist
 
@@ -358,10 +358,15 @@ The `chatterbox-tts` engine and this server rely on PyTorch. To enable CUDA acce
     ```bash
     pip uninstall torch torchvision torchaudio -y
     ```
-5.  Then, paste and run the command obtained from the PyTorch website. Example (for CUDA 12.1, **replace with your specific command**):
+5.  Then, paste and run the command obtained from the PyTorch website. Example (for CUDA 12.6, **replace with your specific command**):
     ```bash
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
     ```
+    torch below 2.6.0 is affected by [CVE-2025-32434](https://nvd.nist.gov/vuln/detail/CVE-2025-32434)
+    (RCE via `torch.load`, even with `weights_only=True`), and this project's `chatterbox-tts`
+    dependency calls `torch.load` on `.pt` files fetched from HuggingFace on every model load.
+    Whatever command you copy from the PyTorch website, do not let it resolve to a torch version
+    below 2.6.0.
 
 #### 4.5.3 Verification
 To verify that PyTorch can utilize your GPU:
@@ -407,7 +412,7 @@ For Apple Silicon Macs (M1, M2, M3, etc.), follow this specific installation seq
 
 4. **Install missing chatterbox dependencies:**
    ```bash
-   pip install conformer==0.3.2 diffusers==0.29.0 resemble-perth==1.0.1 transformers==4.46.3
+   pip install conformer==0.3.2 diffusers==0.29.0 resemble-perth==1.0.1 transformers==5.15.0
    ```
 
 5. **Install remaining dependencies (if not already installed):**
