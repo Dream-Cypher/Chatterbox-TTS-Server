@@ -35,6 +35,7 @@ from fastapi.responses import (
     JSONResponse,
     StreamingResponse,
     FileResponse,
+    Response,
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -884,12 +885,16 @@ async def upload_predefined_voice_endpoint(files: List[UploadFile] = File(...)):
     },
 )
 async def custom_tts_endpoint(
-    request: CustomTTSRequest, background_tasks: BackgroundTasks
+    request: CustomTTSRequest, http_request: Request, background_tasks: BackgroundTasks
 ):
     """
     Generates speech audio from text using specified parameters.
     Handles various voice modes (predefined, clone) and audio processing options.
     Returns audio as a stream (WAV or Opus).
+
+    `http_request` is Starlette's transport-level Request (distinct from `request`, the
+    parsed body model) — it's what lets the handler notice the client has disconnected
+    (Cancel/Stop) via `http_request.is_disconnected()`, checked between chunks below.
     """
     perf_monitor = utils.PerformanceMonitor(
         enabled=config_manager.get_bool("server.enable_performance_monitor", False)
@@ -1024,57 +1029,80 @@ async def custom_tts_endpoint(
         CROSSFADE_MS_STREAM = 20
 
         async def _stream_generator():
+            # No manual http_request.is_disconnected() poll here (unlike the non-streaming
+            # loop below): Starlette's StreamingResponse already runs its own disconnect
+            # listener against this same request while consuming this generator, and it
+            # cancels the generator's task the moment the client goes away. A second,
+            # manual read of the same ASGI receive channel from inside the generator races
+            # that listener for the same underlying event and can hang (observed: the
+            # in-flight request just sat idle, 0% CPU, while other endpoints kept
+            # responding normally - the generator's task was stuck, not the event loop).
+            # So cancellation here is handled by catching the CancelledError Starlette
+            # delivers instead of polling for it.
             loop = asyncio.get_running_loop()
             carry: Optional[np.ndarray] = None
             header_sent = False
+            current_chunk_num = 0
 
-            for i, chunk_text in enumerate(text_chunks):
-                is_last = i == len(text_chunks) - 1
-                logger.info(f"Streaming chunk {i+1}/{len(text_chunks)}...")
+            try:
+                for i, chunk_text in enumerate(text_chunks):
+                    current_chunk_num = i + 1
+                    is_last = i == len(text_chunks) - 1
+                    logger.info(f"Streaming chunk {current_chunk_num}/{len(text_chunks)}...")
 
-                audio_tensor, chunk_sr = await loop.run_in_executor(
-                    None,
-                    lambda c=chunk_text: engine.synthesize(
-                        text=c,
-                        audio_prompt_path=audio_prompt_str,
-                        temperature=temperature_val,
-                        exaggeration=exaggeration_val,
-                        cfg_weight=cfg_weight_val,
-                        seed=seed_val,
-                        language=language_val,
-                    ),
-                )
-
-                if audio_tensor is None or chunk_sr is None:
-                    logger.error(f"Streaming TTS: engine returned None for chunk {i+1}; stopping stream.")
-                    return
-
-                if speed_factor_stream != 1.0:
-                    audio_tensor, _ = utils.apply_speed_factor(
-                        audio_tensor, chunk_sr, speed_factor_stream
+                    audio_tensor, chunk_sr = await loop.run_in_executor(
+                        None,
+                        lambda c=chunk_text: engine.synthesize(
+                            text=c,
+                            audio_prompt_path=audio_prompt_str,
+                            temperature=temperature_val,
+                            exaggeration=exaggeration_val,
+                            cfg_weight=cfg_weight_val,
+                            seed=seed_val,
+                            language=language_val,
+                        ),
                     )
 
-                audio_np = audio_tensor.cpu().numpy().squeeze().astype(np.float32)
+                    if audio_tensor is None or chunk_sr is None:
+                        logger.error(f"Streaming TTS: engine returned None for chunk {i+1}; stopping stream.")
+                        return
 
-                if not header_sent:
-                    yield _create_wav_header(chunk_sr)
-                    header_sent = True
+                    if speed_factor_stream != 1.0:
+                        audio_tensor, _ = utils.apply_speed_factor(
+                            audio_tensor, chunk_sr, speed_factor_stream
+                        )
 
-                fade_samples = int(CROSSFADE_MS_STREAM / 1000 * chunk_sr)
+                    audio_np = audio_tensor.cpu().numpy().squeeze().astype(np.float32)
+
+                    if not header_sent:
+                        yield _create_wav_header(chunk_sr)
+                        header_sent = True
+
+                    fade_samples = int(CROSSFADE_MS_STREAM / 1000 * chunk_sr)
+
+                    if carry is not None:
+                        # Crossfade the held-back tail of the previous chunk with the head of this one
+                        audio_np = _crossfade_with_overlap(carry, audio_np, fade_samples)
+                        carry = None
+
+                    if not is_last and len(audio_np) > fade_samples:
+                        carry = audio_np[-fade_samples:].copy()
+                        yield _float32_to_pcm16(audio_np[:-fade_samples])
+                    else:
+                        yield _float32_to_pcm16(audio_np)
 
                 if carry is not None:
-                    # Crossfade the held-back tail of the previous chunk with the head of this one
-                    audio_np = _crossfade_with_overlap(carry, audio_np, fade_samples)
-                    carry = None
-
-                if not is_last and len(audio_np) > fade_samples:
-                    carry = audio_np[-fade_samples:].copy()
-                    yield _float32_to_pcm16(audio_np[:-fade_samples])
-                else:
-                    yield _float32_to_pcm16(audio_np)
-
-            if carry is not None:
-                yield _float32_to_pcm16(carry)
+                    yield _float32_to_pcm16(carry)
+            except asyncio.CancelledError:
+                # Starlette's disconnect listener cancelled us - the client is gone.
+                # engine.synthesize has no cancellation hook, so if this fired while a
+                # chunk's run_in_executor call was in flight, that chunk keeps computing
+                # on its worker thread regardless; its result is simply never used.
+                logger.info(
+                    f"Client disconnected; abandoning generation at chunk "
+                    f"{current_chunk_num}/{len(text_chunks)}."
+                )
+                raise
 
         timestamp_str = time.strftime("%Y%m%d_%H%M%S")
         stream_filename = utils.sanitize_filename(f"tts_stream_{timestamp_str}.wav")
@@ -1085,38 +1113,53 @@ async def custom_tts_endpoint(
         )
     # --- End streaming fork ---
 
+    loop = asyncio.get_running_loop()
     for i, chunk in enumerate(text_chunks):
+        if await http_request.is_disconnected():
+            logger.info(
+                f"Client disconnected; abandoning generation at chunk {i+1}/{len(text_chunks)}."
+            )
+            return Response(status_code=499)
+
         logger.info(f"Synthesizing chunk {i+1}/{len(text_chunks)}...")
         try:
-            chunk_audio_tensor, chunk_sr_from_engine = engine.synthesize(
-                text=chunk,
-                audio_prompt_path=(
-                    str(audio_prompt_path_for_engine)
-                    if audio_prompt_path_for_engine
-                    else None
-                ),
-                temperature=(
-                    request.temperature
-                    if request.temperature is not None
-                    else get_gen_default_temperature()
-                ),
-                exaggeration=(
-                    request.exaggeration
-                    if request.exaggeration is not None
-                    else get_gen_default_exaggeration()
-                ),
-                cfg_weight=(
-                    request.cfg_weight
-                    if request.cfg_weight is not None
-                    else get_gen_default_cfg_weight()
-                ),
-                seed=(
-                    request.seed if request.seed is not None else get_gen_default_seed()
-                ),
-                language=(
-                    request.language
-                    if request.language is not None
-                    else get_gen_default_language()
+            # Run the blocking torch call in an executor so the event loop stays free to
+            # process the disconnect check above (and other requests) instead of stalling
+            # for the whole generation. engine.synthesize has no cancellation hook, so a
+            # chunk already in flight here always finishes; cancellation only takes effect
+            # at the next chunk boundary, above.
+            chunk_audio_tensor, chunk_sr_from_engine = await loop.run_in_executor(
+                None,
+                lambda c=chunk: engine.synthesize(
+                    text=c,
+                    audio_prompt_path=(
+                        str(audio_prompt_path_for_engine)
+                        if audio_prompt_path_for_engine
+                        else None
+                    ),
+                    temperature=(
+                        request.temperature
+                        if request.temperature is not None
+                        else get_gen_default_temperature()
+                    ),
+                    exaggeration=(
+                        request.exaggeration
+                        if request.exaggeration is not None
+                        else get_gen_default_exaggeration()
+                    ),
+                    cfg_weight=(
+                        request.cfg_weight
+                        if request.cfg_weight is not None
+                        else get_gen_default_cfg_weight()
+                    ),
+                    seed=(
+                        request.seed if request.seed is not None else get_gen_default_seed()
+                    ),
+                    language=(
+                        request.language
+                        if request.language is not None
+                        else get_gen_default_language()
+                    ),
                 ),
             )
             perf_monitor.record(f"Engine synthesized chunk {i+1}")
