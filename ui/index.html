@@ -130,10 +130,19 @@
                                         step="10" value="120" class="form-slider short">
                                     <span id="chunk-size-value" class="slider-value tabular-nums">120</span>
                                 </div>
+                                <label for="stream-toggle" class="checkbox-label">
+                                    <input type="checkbox" id="stream-toggle" name="stream" class="form-checkbox">
+                                    <span>Stream (start playing sooner)</span>
+                                </label>
                             </div>
                             <p id="chunk-explanation" class="form-hint mb-6 hidden">
                                 Splitting is essential for longer texts like articles or audiobook chapters. Recommended
                                 chunk size: ~150-400 characters.
+                            </p>
+                            <p id="stream-explanation" class="form-hint mb-6">
+                                Starts playing audio after the first chunk instead of waiting for the whole
+                                response. Works best on longer text with splitting enabled. The waveform below
+                                still appears once generation finishes.
                             </p>
 
                             <div class="form-group">

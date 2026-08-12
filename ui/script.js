@@ -12,6 +12,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     let saveStateTimeout = null;
     let currentPresetName = null;
 
+    // --- Streaming playback state ---
+    let currentAbortController = null; // AbortController for the in-flight streaming fetch, if any
+    let streamAudioContext = null; // AudioContext reused across streaming generations
+    let streamScheduledSources = []; // AudioBufferSourceNodes currently scheduled/playing
+
     let currentConfig = {};
     let currentUiState = {};
     let appPresets = [];
@@ -75,6 +80,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const charCount = document.getElementById('char-count');
     const generateBtn = document.getElementById('generate-btn');
     const splitTextToggle = document.getElementById('split-text-toggle');
+    const streamToggle = document.getElementById('stream-toggle');
     const chunkSizeControls = document.getElementById('chunk-size-controls');
     const chunkSizeSlider = document.getElementById('chunk-size-slider');
     const chunkSizeValue = document.getElementById('chunk-size-value');
@@ -1118,7 +1124,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             voice_mode: currentVoiceMode,
             split_text: splitTextToggle.checked,
             chunk_size: parseInt(chunkSizeSlider.value, 10),
-            output_format: outputFormatSelect.value || 'mp3'
+            output_format: outputFormatSelect.value || 'mp3',
+            stream: !!(streamToggle && streamToggle.checked)
         };
         if (currentVoiceMode === 'predefined' && predefinedVoiceSelect.value !== 'none') {
             jsonData.predefined_voice_id = predefinedVoiceSelect.value;
@@ -1131,8 +1138,19 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function submitTTSRequest() {
         isGenerating = true;
         showLoadingOverlay();
-        const startTime = performance.now();
         const jsonData = getTTSFormData();
+
+        // Streaming needs the Web Audio API to schedule PCM as it arrives; WaveSurfer itself
+        // cannot play a stream, it needs a complete buffer. If this browser lacks AudioContext,
+        // degrade silently to the normal request/response path below rather than breaking.
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (jsonData.stream && AudioContextClass) {
+            await submitTTSRequestStreaming(jsonData);
+            return;
+        }
+        jsonData.stream = false;
+
+        const startTime = performance.now();
         try {
             const response = await fetch(`${API_BASE_URL}/tts`, {
                 method: 'POST',
@@ -1163,7 +1181,213 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    // --- Streaming TTS Generation ---
+
+    // Parses a WAV header by walking its RIFF chunks rather than assuming fixed offsets, since
+    // the server (server.py's _create_wav_header) writes a placeholder 0xFFFFFFFF data size for
+    // streaming responses — the real sample rate/channels/bit depth must be read from the 'fmt '
+    // chunk, and the 'data' chunk's declared size must be ignored (bytes are simply consumed
+    // until the stream ends). Returns null if `bytes` doesn't yet contain a full header.
+    function parseWavHeader(bytes) {
+        if (bytes.length < 12) return null;
+        const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        if (dv.getUint32(0, false) !== 0x52494646 /* 'RIFF' */ || dv.getUint32(8, false) !== 0x57415645 /* 'WAVE' */) {
+            return null;
+        }
+        let offset = 12;
+        let fmt = null;
+        while (offset + 8 <= bytes.length) {
+            const chunkId = dv.getUint32(offset, false);
+            const chunkSize = dv.getUint32(offset + 4, true);
+            const bodyOffset = offset + 8;
+            if (chunkId === 0x666d7420 /* 'fmt ' */) {
+                if (bodyOffset + 16 > bytes.length) return null; // fmt chunk not fully buffered yet
+                fmt = {
+                    numChannels: dv.getUint16(bodyOffset + 2, true),
+                    sampleRate: dv.getUint32(bodyOffset + 4, true),
+                    bitsPerSample: dv.getUint16(bodyOffset + 14, true)
+                };
+                offset = bodyOffset + chunkSize + (chunkSize % 2);
+            } else if (chunkId === 0x64617461 /* 'data' */) {
+                if (!fmt) return null; // malformed: data before fmt
+                return { ...fmt, dataOffset: bodyOffset };
+            } else {
+                offset = bodyOffset + chunkSize + (chunkSize % 2);
+            }
+        }
+        return null; // haven't seen the 'data' chunk header yet — need more bytes
+    }
+
+    function pcm16BytesToFloat32(bytes) {
+        const sampleCount = bytes.length >> 1;
+        const out = new Float32Array(sampleCount);
+        const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        for (let i = 0; i < sampleCount; i++) {
+            out[i] = dv.getInt16(i * 2, true) / 32768;
+        }
+        return out;
+    }
+
+    function concatBytes(a, b) {
+        const out = new Uint8Array(a.length + b.length);
+        out.set(a, 0);
+        out.set(b, a.length);
+        return out;
+    }
+
+    function stopStreamPlayback() {
+        streamScheduledSources.forEach((src) => {
+            try { src.stop(); } catch (e) { /* already stopped/finished */ }
+        });
+        streamScheduledSources = [];
+    }
+
+    async function submitTTSRequestStreaming(jsonData) {
+        const startTime = performance.now();
+        let firstChunkLogged = false;
+
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!streamAudioContext || streamAudioContext.state === 'closed') {
+            streamAudioContext = new AudioContextClass();
+        }
+        const audioCtx = streamAudioContext;
+        let nextStartTime = audioCtx.currentTime;
+        streamScheduledSources = [];
+
+        const controller = new AbortController();
+        currentAbortController = controller;
+
+        const receivedChunks = []; // raw bytes as received, reassembled into the final WAV blob
+        let headerBytes = new Uint8Array(0);
+        let wavInfo = null; // { numChannels, sampleRate, bitsPerSample, dataOffset }
+        let pendingPcm = new Uint8Array(0); // undecoded leftover bytes (partial sample frame)
+
+        function scheduleChunk(pcmBytes) {
+            if (wavInfo.bitsPerSample !== 16) {
+                // Server only ever emits 16-bit PCM for streaming, but don't silently misdecode
+                // if that ever changes — the bytes are still accumulated for the final blob.
+                console.warn(`[stream] Unsupported bitsPerSample=${wavInfo.bitsPerSample}; skipping live playback for this chunk.`);
+                return;
+            }
+            const float32 = pcm16BytesToFloat32(pcmBytes);
+            const frameCount = Math.floor(float32.length / wavInfo.numChannels);
+            if (frameCount <= 0) return;
+            const buffer = audioCtx.createBuffer(wavInfo.numChannels, frameCount, wavInfo.sampleRate);
+            for (let ch = 0; ch < wavInfo.numChannels; ch++) {
+                const channelData = buffer.getChannelData(ch);
+                if (wavInfo.numChannels === 1) {
+                    channelData.set(float32.subarray(0, frameCount));
+                } else {
+                    for (let i = 0; i < frameCount; i++) channelData[i] = float32[i * wavInfo.numChannels + ch];
+                }
+            }
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+            const startAt = Math.max(nextStartTime, audioCtx.currentTime);
+            source.start(startAt);
+            nextStartTime = startAt + buffer.duration;
+            streamScheduledSources.push(source);
+            if (!firstChunkLogged) {
+                firstChunkLogged = true;
+                console.log(`[stream] first chunk scheduled at +${(performance.now() - startTime).toFixed(1)}ms`);
+            }
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/tts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(jsonData),
+                signal: controller.signal
+            });
+            if (!response.ok) {
+                const errorResult = await response.json().catch(() => ({ detail: `HTTP error ${response.status}` }));
+                throw new Error(formatErrorDetail(errorResult.detail) || 'TTS generation failed.');
+            }
+            if (!response.body) {
+                throw new Error('This browser does not support streaming responses.');
+            }
+            const filenameFromServer = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'generated_audio.wav';
+
+            const reader = response.body.getReader();
+            while (true) {
+                const { done, value } = await reader.read();
+                if (value && value.length) {
+                    receivedChunks.push(value);
+                    if (!wavInfo) {
+                        headerBytes = concatBytes(headerBytes, value);
+                        const parsed = parseWavHeader(headerBytes);
+                        if (parsed) {
+                            wavInfo = parsed;
+                            pendingPcm = headerBytes.subarray(parsed.dataOffset);
+                        }
+                    } else {
+                        pendingPcm = concatBytes(pendingPcm, value);
+                    }
+
+                    if (wavInfo) {
+                        const alignBytes = wavInfo.numChannels * (wavInfo.bitsPerSample / 8);
+                        const usableLen = pendingPcm.length - (pendingPcm.length % alignBytes);
+                        if (usableLen > 0) {
+                            scheduleChunk(pendingPcm.subarray(0, usableLen));
+                            pendingPcm = pendingPcm.slice(usableLen);
+                        }
+                    }
+                }
+                if (done) break;
+            }
+            // Flush any final partial frame (shouldn't normally happen; PCM is sample-aligned).
+            if (wavInfo && pendingPcm.length >= wavInfo.numChannels * (wavInfo.bitsPerSample / 8)) {
+                scheduleChunk(pendingPcm);
+            }
+
+            console.log(`[stream] stream complete at +${(performance.now() - startTime).toFixed(1)}ms`);
+            const genTime = ((performance.now() - startTime) / 1000).toFixed(2);
+
+            // Hand the fully-assembled audio to WaveSurfer exactly like the non-streaming path,
+            // so the waveform, seeking, and the download link all work the same afterwards.
+            const audioBlob = new Blob(receivedChunks, { type: 'audio/wav' });
+            const resultDetails = {
+                outputUrl: URL.createObjectURL(audioBlob), filename: filenameFromServer, genTime: genTime,
+                submittedVoiceMode: jsonData.voice_mode, submittedPredefinedVoice: jsonData.predefined_voice_id,
+                submittedCloneFile: jsonData.reference_audio_filename
+            };
+            initializeWaveSurfer(resultDetails.outputUrl, resultDetails);
+            showNotification('Audio generated successfully!', 'success');
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                return; // Cancelled by the user — the cancel button already stopped playback.
+            }
+            console.error('Streaming TTS Generation Error:', error);
+            showNotification(error.message || 'An unknown error occurred during TTS generation.', 'error');
+        } finally {
+            currentAbortController = null;
+            isGenerating = false;
+            hideLoadingOverlay();
+        }
+    }
+
+    // Creates (or resumes) the shared streaming AudioContext. Must be called synchronously
+    // from within a user-gesture click handler — browsers only allow an AudioContext to start
+    // producing sound if it was created/resumed during a user gesture, and that permission does
+    // not survive an `await`. proceedWithSubmissionChecks() is always invoked directly from a
+    // click listener (the Generate button, or a warning modal's confirm button), so calling this
+    // as its first line keeps it inside that gesture.
+    function ensureStreamAudioContext() {
+        if (!streamToggle || !streamToggle.checked) return;
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return; // No AudioContext support — submitTTSRequest() falls back to non-streaming.
+        if (!streamAudioContext || streamAudioContext.state === 'closed') {
+            streamAudioContext = new AudioContextClass();
+        }
+        if (streamAudioContext.state === 'suspended') {
+            streamAudioContext.resume().catch(() => {});
+        }
+    }
+
     function proceedWithSubmissionChecks() {
+        ensureStreamAudioContext();
         const textContent = textArea.value.trim();
         const isSplittingEnabled = splitTextToggle.checked;
         const currentChunkSz = parseInt(chunkSizeSlider.value, 10);
@@ -1261,7 +1485,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         hideGenerationWarningModal(); debouncedSaveState(); proceedWithSubmissionChecks();
     });
     if (loadingCancelBtn) loadingCancelBtn.addEventListener('click', () => {
-        if (isGenerating) { isGenerating = false; hideLoadingOverlay(); showNotification("Generation UI cancelled by user.", "info"); }
+        if (isGenerating) {
+            if (currentAbortController) { currentAbortController.abort(); currentAbortController = null; }
+            stopStreamPlayback();
+            isGenerating = false;
+            hideLoadingOverlay();
+            showNotification("Generation UI cancelled by user.", "info");
+        }
     });
     function showLoadingOverlay() {
         if (loadingOverlay && generateBtn && loadingCancelBtn) {
