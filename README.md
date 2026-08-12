@@ -36,7 +36,7 @@ This server is based on the architecture and UI of our [Dia-TTS-Server](https://
 
 v2.0 ships the complete Chatterbox family on every major GPU stack behind one OpenAI-compatible API and Web UI. The headline themes:
 
-- **DGX Spark / sm_121 support** via the new `docker-compose-cu130.yml` (CUDA 13.0, PyTorch 2.10). RTX 30/40/50 keep using cu121 / cu128.
+- **DGX Spark / sm_121 support** via the new `docker-compose-cu130.yml` (CUDA 13.0, PyTorch 2.10). RTX 30/40/50 keep using cu126 / cu128.
 - **AMD Strix Halo support** via `docker-compose-strixhalo.yml` (ROCm 7.2, `HSA_OVERRIDE_GFX_VERSION=11.0.0`).
 - **Streaming `/tts` endpoint** — opt-in `stream: true` parameter returns a `StreamingResponse` that flushes WAV bytes per chunk with 20 ms crossfades. Default behavior unchanged.
 - **Voice conditioning cache** — repeated requests against the same reference voice skip re-encoding. Real latency win for batch / OpenAI-endpoint workflows.
@@ -106,7 +106,7 @@ See the [v2.0.0 release notes](https://github.com/devnen/Chatterbox-TTS-Server/r
 - **config.yaml:** Default device changed from `cuda` to `auto` for correct auto-detection on all hardware (CUDA, MPS, CPU).
 - **Python version:** **Python 3.10 is required** — it is the only version with pre-built wheels for all dependencies (torch, torchvision, ONNX). Python 3.11+ may fail due to missing wheels. The Windows launcher's Portable Mode handles this automatically by using an embedded Python 3.10 runtime.
 - **Blackwell (CUDA 12.8):** Fixed `requirements-nvidia-cu128.txt` to properly install PyTorch 2.9.0 with CUDA 12.8 (`sm_120` support) for RTX 5060 Ti, 5070, 5070 Ti, 5080, and 5090 GPUs. The `Dockerfile.cu128` now correctly installs chatterbox with `--no-deps` to prevent PyTorch downgrade.
-- **AMD ROCm:** Fixed ROCm installation by switching to PyTorch's official ROCm 6.1 wheel index (`torch==2.5.1+rocm6.1`), which resolves the previous `torch==2.6.0` / `torchaudio==2.5.1` version conflict. A new `requirements-rocm-init.txt` installs the ROCm PyTorch stack before other dependencies. Both `Dockerfile.rocm` and `start.py` now use a two-step install to prevent pip from replacing ROCm torch wheels with CPU-only versions.
+- **AMD ROCm:** Fixed ROCm installation by switching to PyTorch's official ROCm wheel index (now `torch==2.13.0+rocm7.2`, raised from an earlier `rocm6.1` pin to clear CVE-2025-32434's torch 2.6.0 floor), which resolves the previous `torch==2.6.0` / `torchaudio==2.5.1` version conflict. A new `requirements-rocm-init.txt` installs the ROCm PyTorch stack before other dependencies. Both `Dockerfile.rocm` and `start.py` now use a two-step install to prevent pip from replacing ROCm torch wheels with CPU-only versions.
 - Thanks to community contributors in issues #20, #23, #44, #58, #64, #79, #89, #92, #93, #98, #105, #107, #109, #113, #114, #121, and #122 for testing and reporting solutions.
 
 ### 🧰 Automated launcher + easy updates
@@ -183,7 +183,7 @@ This server application enhances the underlying `chatterbox-tts` engine with the
 
 *   **Easy Installation & Management:**
     *   🚀 **Automated Launcher** (`start.bat` / `start.sh`) - One-command setup with automatic hardware detection
-    *   🔧 **Multiple GPU Support** - NVIDIA CUDA 12.1, NVIDIA CUDA 12.8 (Blackwell), AMD ROCm, Apple MPS
+    *   🔧 **Multiple GPU Support** - NVIDIA CUDA 12.6, NVIDIA CUDA 12.8 (Blackwell), AMD ROCm, Apple MPS
     *   🔄 **Easy Updates** - Simple `--upgrade` and `--reinstall` commands
     *   📦 **Portable Mode (Windows)** - Self-contained, movable installation — copy to USB, share as zip, run anywhere without Python
     *   🎯 **Skip Menu Options** - Direct installation with `--cpu`, `--nvidia`, `--nvidia-cu128`, `--rocm`, `--portable` flags
@@ -252,7 +252,7 @@ This server application enhances the underlying `chatterbox-tts` engine with the
 *   **Internet:** For downloading dependencies and models from Hugging Face Hub.
 *   **Disk Space:** 10GB+ recommended (for dependencies and model cache).
 *   **(Optional but HIGHLY Recommended for Performance):**
-    *   **NVIDIA GPU (CUDA 12.1):** CUDA-compatible (Maxwell architecture or newer, RTX 20/30/40 series). Check [NVIDIA CUDA GPUs](https://developer.nvidia.com/cuda-gpus).
+    *   **NVIDIA GPU (CUDA 12.6):** CUDA-compatible (Maxwell architecture or newer, RTX 20/30/40 series). Check [NVIDIA CUDA GPUs](https://developer.nvidia.com/cuda-gpus).
     *   **NVIDIA GPU (CUDA 12.8):** RTX 5090 or other Blackwell-based GPUs, driver version 570+.
     *   **NVIDIA Drivers:** Latest version for your GPU/OS ([Download](https://www.nvidia.com/Download/index.aspx)).
     *   **AMD GPU:** ROCm-compatible (e.g., RX 6000/7000 series). Check [AMD ROCm GPUs](https://rocm.docs.amd.com/en/latest/reference/gpu-arch-specs.html).
@@ -331,7 +331,7 @@ chmod +x start.sh
    [1] CPU Only
        No GPU acceleration - works on any system
 
-   [2] NVIDIA GPU (CUDA 12.1) [DEFAULT]
+   [2] NVIDIA GPU (CUDA 12.6) [DEFAULT]
        Standard for RTX 20/30/40 series
 
    [3] NVIDIA GPU (CUDA 12.8)
@@ -354,7 +354,7 @@ chmod +x start.sh
 | `--reinstall` or `-r` | Remove existing installation and reinstall fresh (shows menu) |
 | `--upgrade` or `-u` | Upgrade to latest version (keeps current hardware selection) |
 | `--cpu` | Install CPU-only version (skip menu) |
-| `--nvidia` | Install NVIDIA CUDA 12.1 version (skip menu) |
+| `--nvidia` | Install NVIDIA CUDA 12.6 version (skip menu) |
 | `--nvidia-cu128` | Install NVIDIA CUDA 12.8 version for RTX 5090/Blackwell (skip menu) |
 | `--rocm` | Install AMD ROCm version (skip menu) |
 | `--portable` | Use portable Python environment on Windows (skip prompt) |
@@ -365,7 +365,7 @@ chmod +x start.sh
 **Examples:**
 
 ```bash
-# Skip menu and install NVIDIA CUDA 12.1 directly
+# Skip menu and install NVIDIA CUDA 12.6 directly
 python start.py --nvidia
 
 # Reinstall with fresh dependencies
@@ -515,7 +515,7 @@ The `requirements.txt` file installs CPU PyTorch and all server dependencies. Ch
 
 ---
 
-### **Option 2: NVIDIA GPU Installation (CUDA 12.1)**
+### **Option 2: NVIDIA GPU Installation (CUDA 12.6)**
 
 For users with NVIDIA GPUs. This provides the best performance for RTX 20/30/40 series.
 
@@ -536,7 +536,7 @@ If `CUDA available:` shows `True`, your setup is correct!
 
 <details>
 <summary><strong>💡 How This Works</strong></summary>
-The `requirements-nvidia.txt` file installs PyTorch with CUDA 12.1 support plus all server dependencies. Chatterbox is installed separately with `--no-deps` to prevent pip from downgrading the CUDA torch to a CPU version or triggering ONNX source builds.
+The `requirements-nvidia.txt` file installs PyTorch with CUDA 12.6 support plus all server dependencies. Chatterbox is installed separately with `--no-deps` to prevent pip from downgrading the CUDA torch to a CPU version or triggering ONNX source builds.
 </details>
 
 ---
@@ -592,7 +592,7 @@ See [README_CUDA128.md](README_CUDA128.md) for detailed setup instructions and t
 
 ### **Option 2c: NVIDIA GPU with CUDA 13.0 (DGX Spark / sm_121)**
 
-> **Note:** Use this for **NVIDIA DGX Spark / GB10** hardware (compute capability `sm_121`). RTX 5090 stays on cu128 (Option 2b); RTX 30/40 stays on cu121 (Option 2).
+> **Note:** Use this for **NVIDIA DGX Spark / GB10** hardware (compute capability `sm_121`). RTX 5090 stays on cu128 (Option 2b); RTX 30/40 stays on cu126 (Option 2).
 
 For users on the very latest NVIDIA stack who need CUDA 13.0 and PyTorch 2.10.
 
@@ -643,7 +643,7 @@ If `ROCm available:` shows `True`, your setup is correct!
 <summary><strong>💡 How This Works</strong></summary>
 
 ROCm installation uses a two-step process:
-1. `requirements-rocm-init.txt` installs PyTorch from the official ROCm 6.1 wheel index (`torch==2.5.1+rocm6.1`), ensuring you get AMD GPU-accelerated builds.
+1. `requirements-rocm-init.txt` installs PyTorch from the official ROCm 7.2 wheel index (`torch==2.13.0+rocm7.2`), ensuring you get AMD GPU-accelerated builds.
 2. `requirements-rocm.txt` installs remaining server dependencies without touching PyTorch.
 3. Chatterbox is installed with `--no-deps` to prevent pip's dependency resolver from replacing the ROCm torch with a CPU-only version.
 
@@ -681,7 +681,7 @@ pip install --no-deps git+https://github.com/resemble-ai/chatterbox.git@5de7a54a
 pip install fastapi 'uvicorn[standard]' librosa safetensors soundfile pydub audiotsm praat-parselmouth python-multipart requests aiofiles PyYAML watchdog unidecode inflect tqdm
 
 # Install missing chatterbox dependencies
-pip install conformer==0.3.2 diffusers==0.29.0 resemble-perth==1.0.1 transformers==4.46.3
+pip install conformer==0.3.2 diffusers==0.29.0 resemble-perth==1.0.1 transformers==5.15.0
 
 # Install s3tokenizer without its problematic dependencies
 pip install --no-deps s3tokenizer
@@ -919,7 +919,7 @@ The `--reinstall` flag removes the existing installation completely and shows th
 
 **Changing Hardware Configuration:**
 
-To switch to a different hardware configuration (e.g., from CPU to NVIDIA, or from CUDA 12.1 to CUDA 12.8):
+To switch to a different hardware configuration (e.g., from CPU to NVIDIA, or from CUDA 12.6 to CUDA 12.8):
 
 ```bash
 # Shows menu to select new hardware
@@ -1029,7 +1029,7 @@ After you have updated the code using Method 2 or 3, complete these final steps.
     ```bash
     pip install -r requirements.txt
     ```
-*   **For NVIDIA GPU Systems (CUDA 12.1):**
+*   **For NVIDIA GPU Systems (CUDA 12.6):**
     ```bash
     pip install -r requirements-nvidia.txt
     ```
@@ -1163,7 +1163,7 @@ cd Chatterbox-TTS-Server
 ### 2. Start the Container Based on Your Hardware
 
 #### **For NVIDIA GPU:**
-The default `docker-compose.yml` is configured for NVIDIA RTX 20/30/40 series (CUDA 12.1).
+The default `docker-compose.yml` is configured for NVIDIA RTX 20/30/40 series (CUDA 12.6).
 ```bash
 docker compose up -d --build
 ```
@@ -1288,7 +1288,7 @@ lspci | grep VGA
 *   **Supported GPUs:** AMD Instinct data center GPUs and select Radeon GPUs. Check the [ROCm compatibility list](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/reference/system-requirements.html#supported-gpus).
 *   **Operating System:** ROCm is currently supported only on Linux systems.
 *   **Performance:** AMD GPUs with ROCm provide excellent performance for ML workloads, with support for mixed-precision training.
-*   **PyTorch Version:** Uses PyTorch 2.5.1 with ROCm 6.1 from PyTorch's official wheel index for optimal compatibility.
+*   **PyTorch Version:** Uses PyTorch 2.13.0 with ROCm 7.2 from PyTorch's official wheel index for optimal compatibility.
 
 ## 🔍 Troubleshooting
 
@@ -1365,7 +1365,7 @@ lspci | grep VGA
 ### General Issues
 
 *   **ONNX / wheel build failures:** This is usually caused by using Python 3.11+ which lacks pre-built wheels. Use Python 3.10 and ensure `onnx==1.16.0` is pinned. The updated requirements files handle this automatically.
-*   **"No matching distribution found for torchvision" or "torch==2.5.1+cu121":** You're likely on Python 3.11+ which doesn't have pre-built wheels for all pinned dependencies. Use Python 3.10 or the Windows launcher's Portable Mode which handles this automatically.
+*   **"No matching distribution found for torchvision" or "torch==2.13.0+cu126":** You're likely on Python 3.11+ which doesn't have pre-built wheels for all pinned dependencies. Use Python 3.10 or the Windows launcher's Portable Mode which handles this automatically.
 *   **Import Errors (e.g., `chatterbox-tts`, `librosa`):** Ensure virtual environment is active and dependencies installed successfully. Try reinstalling: `python start.py --reinstall`
 *   **`libsndfile` Error (Linux):** Run `sudo apt install libsndfile1`.
 *   **Model Download Fails:** Check internet connection. `ChatterboxTTS.from_pretrained()` will attempt to download from Hugging Face Hub. Ensure `model.repo_id` in `config.yaml` is correct.

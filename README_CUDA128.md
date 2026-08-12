@@ -11,7 +11,7 @@ Use the CUDA 12.8 configuration if you have:
 - CUDA compute capability **sm_120** or newer
 - CUDA 12.8+ drivers installed on your system (driver version 570+)
 
-**For older GPUs (RTX 20/30/40 series)**, continue using the standard NVIDIA configuration with CUDA 12.1.
+**For older GPUs (RTX 20/30/40 series)**, continue using the standard NVIDIA configuration with CUDA 12.6.
 
 ## Quick Start (Recommended)
 
@@ -149,12 +149,12 @@ Look for **`sm_120`** in the supported architectures list - this confirms Blackw
 
 ## What's Different from Standard Installation?
 
-The CUDA 12.8 configuration differs from the standard CUDA 12.1 setup:
+The CUDA 12.8 configuration differs from the standard CUDA 12.6 setup:
 
-| Aspect | CUDA 12.1 (Standard) | CUDA 12.8 (Blackwell) |
+| Aspect | CUDA 12.6 (Standard) | CUDA 12.8 (Blackwell) |
 |--------|---------------------|----------------------|
-| PyTorch Version | 2.5.1 | 2.9.0 |
-| CUDA Version | 12.1 | 12.8 |
+| PyTorch Version | 2.13.0 | 2.9.0 |
+| CUDA Version | 12.6 | 12.8 |
 | Blackwell Support | ❌ No | ✅ Yes (sm_120) |
 | Requirements File | requirements-nvidia.txt | requirements-nvidia-cu128.txt |
 | Chatterbox Install | Included in requirements | Separate with --no-deps |
@@ -262,9 +262,9 @@ Subsequent starts will be much faster.
 |----------------|--------------|-------------------|---------------------|-----------------|
 | RTX 5090 / Blackwell | Blackwell | sm_120 | `--nvidia-cu128` | 2.9.0+cu128 |
 | DGX Spark / GB10 | Blackwell | sm_121 | Docker `cu130` | 2.10.0+cu130 |
-| RTX 4090 / Ada | Ada Lovelace | sm_89 | `--nvidia` | 2.5.1+cu121 |
-| RTX 3090 / Ampere | Ampere | sm_86 | `--nvidia` | 2.5.1+cu121 |
-| RTX 2080 / Turing | Turing | sm_75 | `--nvidia` | 2.5.1+cu121 |
+| RTX 4090 / Ada | Ada Lovelace | sm_89 | `--nvidia` | 2.13.0+cu126 |
+| RTX 3090 / Ampere | Ampere | sm_86 | `--nvidia` | 2.13.0+cu126 |
+| RTX 2080 / Turing | Turing | sm_75 | `--nvidia` | 2.13.0+cu126 |
 
 ## Performance Notes
 
@@ -293,13 +293,13 @@ python start.py --reinstall --nvidia-cu128
 
 ## Switching Between CUDA Versions
 
-### From CUDA 12.1 to CUDA 12.8
+### From CUDA 12.6 to CUDA 12.8
 
 ```bash
 python start.py --reinstall --nvidia-cu128
 ```
 
-### From CUDA 12.8 to CUDA 12.1
+### From CUDA 12.8 to CUDA 12.6
 
 ```bash
 python start.py --reinstall --nvidia
@@ -317,7 +317,7 @@ docker compose down
 docker compose -f docker-compose-cu128.yml up -d
 ```
 
-### Switch back to CUDA 12.1
+### Switch back to CUDA 12.6
 
 ```bash
 # Stop CUDA 12.8 container
