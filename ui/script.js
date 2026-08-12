@@ -323,6 +323,9 @@ document.addEventListener('DOMContentLoaded', async function () {
             if (modelInfo.type === 'turbo') {
                 modelBadge.className = 'model-badge turbo';
                 modelBadgeText.textContent = '⚡ Turbo';
+            } else if (modelInfo.type === 'nano') {
+                modelBadge.className = 'model-badge turbo';
+                modelBadgeText.textContent = '⚡ Nano';
             } else if (modelInfo.type === 'multilingual') {
                 modelBadge.className = 'model-badge multilingual';
                 modelBadgeText.textContent = '🌍 Multilingual';
@@ -350,6 +353,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             let selectorValue = 'chatterbox';
             if (modelInfo.type === 'turbo') {
                 selectorValue = 'chatterbox-turbo';
+            } else if (modelInfo.type === 'nano') {
+                selectorValue = 'chatterbox-nano';
             } else if (modelInfo.type === 'multilingual') {
                 selectorValue = 'chatterbox-multilingual';
             }
@@ -361,17 +366,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         const exaggerationGroup = document.getElementById('exaggeration-group');
         const cfgWeightGroup = document.getElementById('cfg-weight-group');
 
-        // Show/hide paralinguistic tags section (Turbo only)
+        // Show/hide paralinguistic tags section (Turbo and Nano only)
         if (paralinguisticTagsSection) {
-            if (modelInfo.type === 'turbo' && modelInfo.supports_paralinguistic_tags) {
+            if ((modelInfo.type === 'turbo' || modelInfo.type === 'nano') && modelInfo.supports_paralinguistic_tags) {
                 paralinguisticTagsSection.classList.remove('hidden');
             } else {
                 paralinguisticTagsSection.classList.add('hidden');
             }
         }
 
-        // Hide exaggeration and CFG for turbo model
-        if (modelInfo.type === 'turbo') {
+        // Hide exaggeration and CFG for turbo and nano models (both ignore these params)
+        if (modelInfo.type === 'turbo' || modelInfo.type === 'nano') {
             exaggerationGroup?.classList.add('hidden');
             cfgWeightGroup?.classList.add('hidden');
         } else {
@@ -465,6 +470,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         let currentSelector = 'chatterbox';
         if (currentModelInfo?.type === 'turbo') {
             currentSelector = 'chatterbox-turbo';
+        } else if (currentModelInfo?.type === 'nano') {
+            currentSelector = 'chatterbox-nano';
         } else if (currentModelInfo?.type === 'multilingual') {
             currentSelector = 'chatterbox-multilingual';
         }
@@ -834,7 +841,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         // Filter presets based on current model
         // Hide "Turbo" presets when Chatterbox-Original is loaded
         let filteredPresets = appPresets;
-        if (currentModelInfo && currentModelInfo.type !== 'turbo') {
+        if (currentModelInfo && currentModelInfo.type !== 'turbo' && currentModelInfo.type !== 'nano') {
             filteredPresets = appPresets.filter(preset =>
                 !preset.name.toLowerCase().startsWith('turbo')
             );
