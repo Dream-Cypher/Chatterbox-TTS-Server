@@ -104,8 +104,12 @@ If devnen adopts Nano or v3 themselves, drop your commit rather than merging it:
 |---|---|---|
 | `start.py:115` | `CHATTERBOX_REPO` repointed and pinned | high - single line, they edit it too |
 | `engine.py` | Nano selectors, `_load_kwargs_for`, 19-tag list | medium |
-| `requirements*.txt` | package URL, `pykakasi` | medium |
+| `requirements*.txt` | package URL, `pykakasi`, **and the `torch >= 2.6.0` floor (CVE-2025-32434) on every hardware path's torch/torchaudio/torchvision pins and index URL** | medium - devnen's own files still pin torch 2.5.1 on `cu121`/`rocm6.1`; a rebase can silently reintroduce the CVE here |
+| `Chatterbox_TTS_Colab_Demo.ipynb`, `README_Colab.md` | Colab install cell repointed off `cu121`/torch 2.5.1 to `cu126`/torch 2.13.0 | medium - not a requirements file, easy to miss in a rebase diff |
+| `documentation.md` | manual-install CUDA/torch reinstall snippet repointed off `cu121` | low-medium |
 | `config.yaml` | `model.t3_model` plus local settings | low, but holds local state |
+
+Run `pwsh tests/check_upstreams.ps1` after any rebase - besides reporting upstream drift, it also fails loudly if a rebase reintroduced a `torch==2.0`-`2.5` pin anywhere in the tree.
 
 ## After any update to either
 

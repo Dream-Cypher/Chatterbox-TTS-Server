@@ -1,10 +1,49 @@
-# Reports how far behind each upstream this fork has drifted.
+# Reports how far behind each upstream this fork has drifted, and checks that
+# a rebase (or any other edit) has not reintroduced a torch pin below the
+# CVE-2025-32434 security floor (torch >= 2.6.0 - see UPSTREAM.md).
 # Needs gh authenticated. Run it whenever you wonder if there is anything new.
 #
 #   pwsh tests/check_upstreams.ps1
 
 $PKG_PINNED = '5de7a54aa4e5e2baadb0182dde554908b48b85c2'  # keep in sync with start.py:115
 $SRV_BASE   = '915ae289340e10c6047f27f47e22eae9bf350c32'  # devnen main at fork time
+
+function Test-TorchFloor {
+    # CVE-2025-32434 (RCE via torch.load, even with weights_only=True) is fixed in
+    # torch 2.6.0. This scans every git-tracked file (so it also covers the notebook,
+    # READMEs, and documentation.md - not just requirements*.txt) for a torch pin
+    # below that floor and fails loudly if it finds one.
+    Write-Host "`nTorch security floor (CVE-2025-32434, torch >= 2.6.0)" -ForegroundColor Cyan
+
+    $pattern = 'torch==2\.[0-5]\.'
+    $trackedFiles = git ls-files
+    $offenders = New-Object System.Collections.Generic.List[object]
+
+    foreach ($f in $trackedFiles) {
+        if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { continue }
+        try {
+            $found = Select-String -LiteralPath $f -Pattern $pattern -ErrorAction Stop
+        } catch {
+            continue  # binary or unreadable file - not a text pin, skip
+        }
+        foreach ($m in $found) {
+            $offenders.Add([PSCustomObject]@{ File = $f; Line = $m.LineNumber; Text = $m.Line.Trim() })
+        }
+    }
+
+    if ($offenders.Count -eq 0) {
+        Write-Host "  OK - no torch==2.0-2.5 pin found in any tracked file" -ForegroundColor Green
+        return $true
+    }
+
+    Write-Host "  FAIL - torch pin(s) below the CVE-2025-32434 floor found:" -ForegroundColor Red
+    foreach ($o in $offenders) {
+        Write-Host ("    {0}:{1}: {2}" -f $o.File, $o.Line, $o.Text) -ForegroundColor Red
+    }
+    return $false
+}
+
+$torchFloorOk = Test-TorchFloor
 
 function Report {
     param(
@@ -58,3 +97,8 @@ Report -Label 'SERVER   (this fork is based on it)'  -Repo 'devnen/Chatterbox-TT
 
 Write-Host "`nPackage update  : bump the SHA in start.py:115 and here, reinstall, re-run the tests."
 Write-Host "Server update   : git fetch upstream; git rebase upstream/main. See UPSTREAM.md."
+
+if (-not $torchFloorOk) {
+    Write-Host "`ncheck_upstreams.ps1: FAILED - a torch pin below the CVE-2025-32434 floor is present. See above." -ForegroundColor Red
+    exit 1
+}
