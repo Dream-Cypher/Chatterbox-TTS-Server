@@ -9,7 +9,11 @@ server:
   log_file_max_size_mb: 10
   log_file_backup_count: 5
 model:
+  # chatterbox | chatterbox-turbo | chatterbox-nano | chatterbox-multilingual
   repo_id: chatterbox-turbo
+  # Multilingual T3 checkpoint. Empty = upstream default (v2).
+  # Set to v3 for t3_mtl23ls_v3.safetensors. Ignored by other models.
+  t3_model: ""
 tts_engine:
   device: auto
   predefined_voices_path: voices

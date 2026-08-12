@@ -66,6 +66,9 @@ MODEL_SELECTOR_MAP = {
     # Multilingual model selectors
     "chatterbox-multilingual": "multilingual",
     "multilingual": "multilingual",
+    # Nano model selectors (Turbo architecture, GPT2_small backbone, 110M params)
+    "chatterbox-nano": "nano",
+    "nano": "nano",
 }
 
 # Paralinguistic tags supported by Turbo model
@@ -181,6 +184,21 @@ def _test_mps_functionality() -> bool:
         return False
 
 
+def _load_kwargs_for(model_type: str) -> dict:
+    """Extra kwargs for from_pretrained, by resolved model type.
+
+    Upstream defaults are preserved when the config keys are absent: Turbo stays
+    Turbo, and the multilingual model stays on the v2 checkpoint.
+    """
+    if model_type == "nano":
+        return {"nano": True}
+    if model_type == "multilingual":
+        t3_model = config_manager.get_string("model.t3_model", "").strip()
+        if t3_model:
+            return {"t3_model": t3_model}
+    return {}
+
+
 def _get_model_class(selector: str) -> tuple:
     """
     Determines which model class to use based on the config selector value.
@@ -196,6 +214,19 @@ def _get_model_class(selector: str) -> tuple:
     """
     selector_normalized = selector.lower().strip()
     model_type = MODEL_SELECTOR_MAP.get(selector_normalized)
+
+    if model_type == "nano":
+        if not TURBO_AVAILABLE:
+            raise ImportError(
+                f"Model selector '{selector}' requires ChatterboxTurboTTS (Nano shares "
+                f"Turbo's class), but it is not available in the installed chatterbox "
+                f"package. Install chatterbox-tts from resemble-ai/chatterbox master."
+            )
+        logger.info(
+            f"Model selector '{selector}' resolved to Nano model "
+            f"(ChatterboxTurboTTS with nano=True)"
+        )
+        return ChatterboxTurboTTS, "nano"
 
     if model_type == "turbo":
         if not TURBO_AVAILABLE:
@@ -253,9 +284,11 @@ def get_model_info() -> dict:
         "class_name": loaded_model_class_name,
         "device": model_device,
         "sample_rate": chatterbox_model.sr if chatterbox_model else None,
-        "supports_paralinguistic_tags": loaded_model_type == "turbo",
+        "supports_paralinguistic_tags": loaded_model_type in ("turbo", "nano"),
         "available_paralinguistic_tags": (
-            TURBO_PARALINGUISTIC_TAGS if loaded_model_type == "turbo" else []
+            TURBO_PARALINGUISTIC_TAGS
+            if loaded_model_type in ("turbo", "nano")
+            else []
         ),
         "turbo_available_in_package": TURBO_AVAILABLE,
         "multilingual_available_in_package": MULTILINGUAL_AVAILABLE,
@@ -365,7 +398,12 @@ def load_model() -> bool:
                 )
 
             # Load the model using from_pretrained - handles HuggingFace downloads automatically
-            chatterbox_model = model_class.from_pretrained(device=model_device)
+            load_kwargs = _load_kwargs_for(model_type)
+            if load_kwargs:
+                logger.info(f"Extra load kwargs: {load_kwargs}")
+            chatterbox_model = model_class.from_pretrained(
+                device=model_device, **load_kwargs
+            )
 
             # Convert T3 to bfloat16 if enabled.
             # Token generation is memory-bandwidth bound; bf16 halves bytes read per
