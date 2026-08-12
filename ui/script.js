@@ -1114,9 +1114,11 @@ document.addEventListener('DOMContentLoaded', async function () {
                 }
             };
         }
-        if (scrollToPlayer) {
-            setTimeout(() => audioPlayerContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 150);
-        }
+        // scrollToPlayer is retained as a parameter for callers, but is intentionally a no-op:
+        // the player now sits directly beneath the Generate button rather than at the foot of
+        // the page, so it is already on screen and stealing the scroll position would only
+        // interrupt someone mid-read or mid-edit.
+        void scrollToPlayer;
     }
 
     // --- TTS Generation Logic ---
@@ -1259,9 +1261,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     function showStreamIndicator() {
         if (!streamPlaybackIndicator) return;
         streamPlaybackIndicator.classList.remove('hidden');
-        // Scroll once, early, when the indicator first appears — not again later while the
-        // player state keeps changing under the user.
-        setTimeout(() => streamPlaybackIndicator.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+        // No scrolling: the indicator and player sit directly under the Generate button, so
+        // they are already in view. Moving the page under someone who may be reading or
+        // typing is worse than leaving it alone.
     }
     function hideStreamIndicator() {
         if (streamPlaybackIndicator) streamPlaybackIndicator.classList.add('hidden');

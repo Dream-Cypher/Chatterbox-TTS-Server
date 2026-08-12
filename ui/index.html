@@ -141,9 +141,24 @@
                             </p>
                             <p id="stream-explanation" class="form-hint mb-6">
                                 Starts playing audio after the first chunk instead of waiting for the whole
-                                response. Works best on longer text with splitting enabled. The waveform below
+                                response. Works best on longer text with splitting enabled. The waveform
                                 still appears once generation finishes.
                             </p>
+
+                            <!-- Playback lives directly under the Generate button, not at the foot of the
+                                 page, so the result appears where the user is already looking and no
+                                 scrolling (or scroll-stealing) is needed. -->
+                            <div id="stream-playback-indicator" class="highlight-box mb-6 hidden">
+                                <div class="highlight-box__row">
+                                    <div class="model-status">
+                                        <span class="status-dot warning"></span>
+                                        <span class="model-status__text warning">Streaming &mdash; playing</span>
+                                    </div>
+                                    <button id="stream-stop-btn" type="button" class="btn danger small">Stop</button>
+                                </div>
+                            </div>
+
+                            <div id="audio-player-container" class="mb-6"></div>
 
                             <div class="form-group">
                                 <label class="form-label mb-2">Voice Mode:</label>
@@ -449,21 +464,6 @@
                         </div>
                     </form>
                 </div>
-
-                <!-- Streaming playback indicator: shown in place of the loading overlay once the
-                     first streamed chunk is scheduled, since audio is already playing at that
-                     point. Replaces the modal for the streaming path only (see script.js). -->
-                <div id="stream-playback-indicator" class="highlight-box mt-8 hidden">
-                    <div class="highlight-box__row">
-                        <div class="model-status">
-                            <span class="status-dot warning"></span>
-                            <span class="model-status__text warning">Streaming &mdash; playing</span>
-                        </div>
-                        <button id="stream-stop-btn" type="button" class="btn danger small">Stop</button>
-                    </div>
-                </div>
-
-                <div id="audio-player-container" class="mt-8"></div>
 
                 <div class="mt-10">
                     <h2 class="card__title mb-4">Tips & Tricks</h2>
