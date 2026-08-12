@@ -71,17 +71,30 @@ MODEL_SELECTOR_MAP = {
     "nano": "nano",
 }
 
-# Paralinguistic tags supported by Turbo model
+# Paralinguistic tags supported by the Turbo and Nano models.
+# Sourced from added_tokens.json in ResembleAI/chatterbox-turbo, where these
+# are real tokenizer tokens (IDs 50257-50275) rather than a text convention.
+# Verified by tests/test_tags.py against the checkpoint.
 TURBO_PARALINGUISTIC_TAGS = [
-    "laugh",
+    "advertisement",
+    "angry",
     "chuckle",
-    "sigh",
-    "gasp",
-    "cough",
     "clear throat",
-    "sniff",
+    "cough",
+    "crying",
+    "dramatic",
+    "fear",
+    "gasp",
     "groan",
+    "happy",
+    "laugh",
+    "narration",
+    "sarcastic",
     "shush",
+    "sigh",
+    "sniff",
+    "surprised",
+    "whispering",
 ]
 
 # --- BF16 optimization flag ---
