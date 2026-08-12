@@ -108,8 +108,11 @@ INSTALL_NAMES = {
     INSTALL_ROCM: "AMD GPU (ROCm 6.1)",
 }
 
-# Chatterbox fork URL (used for CUDA 12.8 installation)
-CHATTERBOX_REPO = "git+https://github.com/devnen/chatterbox-v2.git@master"
+# Upstream Resemble AI package, pinned to master tip 2026-07-21.
+# devnen/chatterbox-v2 is frozen at 2026-03-26 and predates both the v3
+# multilingual checkpoint (2026-05-01, 2026-06-10) and Nano (2026-07-21).
+# Pinned to a commit, not @master, so a rebuild is reproducible.
+CHATTERBOX_REPO = "git+https://github.com/resemble-ai/chatterbox.git@5de7a54aa4e5e2baadb0182dde554908b48b85c2"
 
 # Timeout settings (seconds)
 # First run downloads large model files (~2GB). Subsequent starts are much faster.
