@@ -1,14 +1,19 @@
 # requirements-rocm-init.txt
 #
 # ROCm PyTorch stack - MUST be installed BEFORE requirements-rocm.txt
-# Uses PyTorch's official ROCm 6.3 wheel index.
+# Uses PyTorch's official ROCm 7.2 wheel index.
 #
 # torch >= 2.6.0 is a SECURITY FLOOR, not a preference: 2.5.1 and earlier are
 # affected by CVE-2025-32434 (RCE via torch.load, even with weights_only=True),
 # and the chatterbox package calls torch.load on .pt files downloaded from
 # HuggingFace on every model load. This file previously pinned torch 2.5.1 on
-# the rocm6.1 index, which has no wheel above 2.5.1 - hence the index move to
-# rocm6.3, the lowest ROCm index carrying a torch above the floor.
+# the rocm6.1 index. That index does carry newer wheels than 2.5.1 (a prior
+# version of this comment claimed otherwise; that claim was never checked and
+# was wrong) - but the project's policy is newest-available, not merely
+# above-the-floor, so the index moved to rocm7.2, which carries the same
+# torch/torchaudio/torchvision trio (2.13.0 / 2.11.0 / 0.28.0) already verified
+# for the cu126 (NVIDIA) and rocm7.2 (RDNA4/Strix Halo) paths in this repo -
+# checked present on the rocm7.2 index for cp310 on 2026-08-12.
 #
 # NOT TESTED ON AMD HARDWARE. This fork is developed on an RTX 4090, so the
 # NVIDIA paths are verified and this one is not. It is changed because leaving a
@@ -22,8 +27,8 @@
 #   pip install -r requirements-rocm.txt
 #   pip install --no-deps git+https://github.com/resemble-ai/chatterbox.git@5de7a54aa4e5e2baadb0182dde554908b48b85c2
 
--i https://download.pytorch.org/whl/rocm6.3
-torch==2.9.1
-torchaudio==2.9.1
-torchvision==0.24.1
+-i https://download.pytorch.org/whl/rocm7.2
+torch==2.13.0+rocm7.2
+torchaudio==2.11.0+rocm7.2
+torchvision==0.28.0+rocm7.2
 pytorch-triton-rocm
