@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     let currentPresetName = null;
 
     // --- Streaming playback state ---
-    let currentAbortController = null; // AbortController for the in-flight streaming fetch, if any
+    let currentAbortController = null; // AbortController for the in-flight generation fetch (streaming or non-streaming), if any
     let streamAudioContext = null; // AudioContext reused across streaming generations
     let streamScheduledSources = []; // AudioBufferSourceNodes currently scheduled/playing
 
@@ -1161,12 +1161,16 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
         jsonData.stream = false;
 
+        const controller = new AbortController();
+        currentAbortController = controller;
+
         const startTime = performance.now();
         try {
             const response = await fetch(`${API_BASE_URL}/tts`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(jsonData)
+                body: JSON.stringify(jsonData),
+                signal: controller.signal
             });
             if (!response.ok) {
                 const errorResult = await response.json().catch(() => ({ detail: `HTTP error ${response.status}` }));
@@ -1184,9 +1188,15 @@ document.addEventListener('DOMContentLoaded', async function () {
             initializeWaveSurfer(resultDetails.outputUrl, resultDetails);
             showNotification('Audio generated successfully!', 'success');
         } catch (error) {
+            if (error.name === 'AbortError') {
+                // Cancelled by the user — stopStreamingGeneration() already reset the UI.
+                // Unlike streaming, a non-streaming request has no partial audio to keep.
+                return;
+            }
             console.error('TTS Generation Error:', error);
             showNotification(error.message || 'An unknown error occurred during TTS generation.', 'error');
         } finally {
+            currentAbortController = null;
             isGenerating = false;
             hideLoadingOverlay();
         }
@@ -1289,10 +1299,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         lastSource.onended = () => finishStreamingPlayback();
     }
 
-    // Shared teardown for both the "Cancel" button on the loading overlay (pre-first-chunk)
-    // and the "Stop" button on the streaming indicator (post-first-chunk): abort the in-flight
-    // fetch, stop every scheduled source, and return the UI to idle. Whatever audio already
-    // arrived stays loaded in WaveSurfer via the AbortError branch in submitTTSRequestStreaming.
+    // Shared teardown for the "Cancel" button on the loading overlay (streaming pre-first-chunk,
+    // or a non-streaming request in flight) and the "Stop" button on the streaming indicator
+    // (post-first-chunk): abort whichever fetch is in flight, stop every scheduled source, and
+    // return the UI to idle. Whatever streaming audio already arrived stays loaded in WaveSurfer
+    // via the AbortError branch in submitTTSRequestStreaming; a non-streaming request has no
+    // partial audio to keep (its own AbortError branch in submitTTSRequest just returns).
+    //
+    // Note on what cancellation can actually do: engine.synthesize has no cancellation hook, so
+    // whichever chunk is already being generated server-side finishes regardless — aborting here
+    // only stops the chunks after it. For a single-chunk request, that means Cancel/Stop has no
+    // effect on the current work at all.
     function stopStreamingGeneration(notifyMessage) {
         if (currentAbortController) { currentAbortController.abort(); currentAbortController = null; }
         stopStreamPlayback();
@@ -1574,11 +1591,14 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
     if (loadingCancelBtn) loadingCancelBtn.addEventListener('click', () => {
         if (isGenerating) {
-            stopStreamingGeneration("Generation UI cancelled by user.");
+            // Stops after the chunk currently being generated finishes — that one can't be
+            // interrupted server-side. stopStreamingGeneration() aborts whichever request
+            // (streaming or not) is actually in flight.
+            stopStreamingGeneration("Cancelling — current chunk will still finish.");
         }
     });
     if (streamStopBtn) streamStopBtn.addEventListener('click', () => {
-        stopStreamingGeneration("Streaming stopped.");
+        stopStreamingGeneration("Stopping — current chunk will still finish.");
     });
     function showLoadingOverlay(isStreaming = false) {
         if (loadingOverlay && generateBtn && loadingCancelBtn) {
