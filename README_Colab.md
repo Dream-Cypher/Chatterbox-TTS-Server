@@ -44,7 +44,7 @@ echo "✅ env created: cb311"
 
 ---
 
-### Cell 2 — Install PyTorch (CUDA 12.1) + ONNX + Chatterbox fork
+### Cell 2 — Install PyTorch (CUDA 12.6) + ONNX + Chatterbox fork
 
 Notes:
 - This uses **absolute paths** (`/content/bin/micromamba`) so it works regardless of current directory.
@@ -65,11 +65,11 @@ ls -lah "$MICROMAMBA"
 echo "$(ts) Upgrading pip tooling inside cb311..."
 "$MICROMAMBA" run -n cb311 python -m pip install -U pip setuptools wheel --progress-bar on
 
-echo "$(ts) Installing PyTorch 2.5.1 (CUDA 12.1)... (this can take a while)"
+echo "$(ts) Installing PyTorch 2.13.0 (CUDA 12.6)... (this can take a while)"
 "$MICROMAMBA" run -n cb311 pip install \
   --progress-bar on \
-  torch==2.5.1+cu121 torchaudio==2.5.1+cu121 torchvision==0.20.1+cu121 \
-  --index-url https://download.pytorch.org/whl/cu121
+  torch==2.13.0+cu126 torchaudio==2.11.0+cu126 torchvision==0.28.0+cu126 \
+  --index-url https://download.pytorch.org/whl/cu126
 
 echo "$(ts) Installing ONNX (wheel)..."
 "$MICROMAMBA" run -n cb311 pip install --progress-bar on onnx==1.16.0
