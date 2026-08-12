@@ -125,7 +125,7 @@ model_device: Optional[str] = (
 )
 
 # Track which model type is loaded
-loaded_model_type: Optional[str] = None  # "original" or "turbo"
+loaded_model_type: Optional[str] = None  # "original", "turbo", or "nano"
 loaded_model_class_name: Optional[str] = None  # "ChatterboxTTS" or "ChatterboxTurboTTS"
 
 # Voice conditioning cache: avoids re-encoding the same voice file on every request.
@@ -276,8 +276,8 @@ def _get_model_class(selector: str) -> tuple:
     # Unknown selector - default to original with warning
     logger.warning(
         f"Unknown model selector '{selector}'. "
-        f"Valid values: chatterbox, chatterbox-turbo, chatterbox-multilingual, original, turbo, multilingual, "
-        f"ResembleAI/chatterbox, ResembleAI/chatterbox-turbo. "
+        f"Valid values: chatterbox, chatterbox-turbo, chatterbox-nano, chatterbox-multilingual, original, turbo, "
+        f"nano, multilingual, ResembleAI/chatterbox, ResembleAI/chatterbox-turbo. "
         f"Defaulting to original ChatterboxTTS model."
     )
     return ChatterboxTTS, "original"
@@ -293,7 +293,7 @@ def get_model_info() -> dict:
     """
     return {
         "loaded": MODEL_LOADED,
-        "type": loaded_model_type,  # "original", "turbo", or "multilingual"
+        "type": loaded_model_type,  # "original", "turbo", "nano", or "multilingual"
         "class_name": loaded_model_class_name,
         "device": model_device,
         "sample_rate": chatterbox_model.sr if chatterbox_model else None,
@@ -528,7 +528,7 @@ def synthesize(
         effective_prompt = audio_prompt_path
         conds_key = None
         if audio_prompt_path and hasattr(chatterbox_model, "conds"):
-            ex_for_key = 0.0 if loaded_model_type == "turbo" else exaggeration
+            ex_for_key = 0.0 if loaded_model_type in ("turbo", "nano") else exaggeration
             conds_key = _conds_cache_key(audio_prompt_path, ex_for_key)
             if conds_key in _conds_cache:
                 chatterbox_model.conds = _conds_cache[conds_key]
