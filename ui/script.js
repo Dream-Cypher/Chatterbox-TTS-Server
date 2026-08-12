@@ -123,6 +123,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     const loadingMessage = document.getElementById('loading-message');
     const loadingStatusText = document.getElementById('loading-status');
     const loadingCancelBtn = document.getElementById('loading-cancel-btn');
+    const streamPlaybackIndicator = document.getElementById('stream-playback-indicator');
+    const streamStopBtn = document.getElementById('stream-stop-btn');
     const chunkWarningModal = document.getElementById('chunk-warning-modal');
     const chunkWarningOkBtn = document.getElementById('chunk-warning-ok');
     const chunkWarningCancelBtn = document.getElementById('chunk-warning-cancel');
@@ -995,7 +997,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (splitTextToggle) toggleChunkControlsVisibility();
 
     // --- Audio Player (WaveSurfer) ---
-    function initializeWaveSurfer(audioUrl, resultDetails = {}) {
+    // scrollToPlayer: pass false when the player is being (re)populated while the user's
+    // attention is deliberately elsewhere — e.g. handing the final blob to WaveSurfer once a
+    // stream finishes, where the streaming indicator already scrolled into view when playback
+    // started and scheduled Web Audio buffers may still be sounding.
+    function initializeWaveSurfer(audioUrl, resultDetails = {}, scrollToPlayer = true) {
         if (wavesurfer) {
             wavesurfer.unAll(); // Remove all event listeners before destroying
             wavesurfer.destroy();
@@ -1076,7 +1082,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         wavesurfer = WaveSurfer.create({
             container: waveformDiv, waveColor: isDark ? '#6366f1' : '#a5b4fc', progressColor: isDark ? '#4f46e5' : '#6366f1',
             cursorColor: isDark ? '#cbd5e1' : '#475569', barWidth: 3, barRadius: 3, cursorWidth: 1, height: 80, barGap: 2,
-            responsive: true, url: audioUrl, mediaControls: false, normalize: true,
+            responsive: true, url: audioUrl, mediaControls: false, normalize: true, autoplay: false,
         });
 
         wavesurfer.on('ready', () => {
@@ -1108,7 +1114,9 @@ document.addEventListener('DOMContentLoaded', async function () {
                 }
             };
         }
-        setTimeout(() => audioPlayerContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 150);
+        if (scrollToPlayer) {
+            setTimeout(() => audioPlayerContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 150);
+        }
     }
 
     // --- TTS Generation Logic ---
@@ -1137,14 +1145,15 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     async function submitTTSRequest() {
         isGenerating = true;
-        showLoadingOverlay();
         const jsonData = getTTSFormData();
 
         // Streaming needs the Web Audio API to schedule PCM as it arrives; WaveSurfer itself
         // cannot play a stream, it needs a complete buffer. If this browser lacks AudioContext,
         // degrade silently to the normal request/response path below rather than breaking.
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (jsonData.stream && AudioContextClass) {
+        const willStream = !!(jsonData.stream && AudioContextClass);
+        showLoadingOverlay(willStream);
+        if (willStream) {
             await submitTTSRequestStreaming(jsonData);
             return;
         }
@@ -1242,6 +1251,54 @@ document.addEventListener('DOMContentLoaded', async function () {
         streamScheduledSources = [];
     }
 
+    // --- Streaming playback indicator ---
+    // Shown in place of the loading overlay from the moment the first chunk is scheduled
+    // (audio is already playing at that point) until the scheduled Web Audio buffers have
+    // actually finished sounding — not merely until the fetch completes, since a fast server
+    // can finish sending bytes well before real-time playback of them is done.
+    function showStreamIndicator() {
+        if (!streamPlaybackIndicator) return;
+        streamPlaybackIndicator.classList.remove('hidden');
+        // Scroll once, early, when the indicator first appears — not again later while the
+        // player state keeps changing under the user.
+        setTimeout(() => streamPlaybackIndicator.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+    }
+    function hideStreamIndicator() {
+        if (streamPlaybackIndicator) streamPlaybackIndicator.classList.add('hidden');
+    }
+
+    // Marks a streaming generation as fully done from the user's perspective: audio has
+    // actually stopped (naturally or via Stop), so the Generate button and player should read
+    // as idle/replayable again.
+    function finishStreamingPlayback() {
+        hideStreamIndicator();
+        isGenerating = false;
+    }
+
+    // Watches the last scheduled source so the indicator comes down only once real playback
+    // ends, not when the fetch merely finishes. Idempotent — safe to invoke even if playback
+    // was already stopped by the user.
+    function attachStreamCompletionHandler() {
+        const lastSource = streamScheduledSources[streamScheduledSources.length - 1];
+        if (!lastSource) {
+            finishStreamingPlayback();
+            return;
+        }
+        lastSource.onended = () => finishStreamingPlayback();
+    }
+
+    // Shared teardown for both the "Cancel" button on the loading overlay (pre-first-chunk)
+    // and the "Stop" button on the streaming indicator (post-first-chunk): abort the in-flight
+    // fetch, stop every scheduled source, and return the UI to idle. Whatever audio already
+    // arrived stays loaded in WaveSurfer via the AbortError branch in submitTTSRequestStreaming.
+    function stopStreamingGeneration(notifyMessage) {
+        if (currentAbortController) { currentAbortController.abort(); currentAbortController = null; }
+        stopStreamPlayback();
+        hideLoadingOverlay();
+        finishStreamingPlayback();
+        if (notifyMessage) showNotification(notifyMessage, 'info');
+    }
+
     async function submitTTSRequestStreaming(jsonData) {
         const startTime = performance.now();
         let firstChunkLogged = false;
@@ -1261,6 +1318,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         let headerBytes = new Uint8Array(0);
         let wavInfo = null; // { numChannels, sampleRate, bitsPerSample, dataOffset }
         let pendingPcm = new Uint8Array(0); // undecoded leftover bytes (partial sample frame)
+        let filenameFromServer = 'generated_audio.wav'; // hoisted so the AbortError branch can use it too
 
         function scheduleChunk(pcmBytes) {
             if (wavInfo.bitsPerSample !== 16) {
@@ -1291,6 +1349,11 @@ document.addEventListener('DOMContentLoaded', async function () {
             if (!firstChunkLogged) {
                 firstChunkLogged = true;
                 console.log(`[stream] first chunk scheduled at +${(performance.now() - startTime).toFixed(1)}ms`);
+                // Audio is playing now — the blocking modal has done its job. Hand off to the
+                // inline "Streaming — playing" indicator instead of leaving the user locked out
+                // for the rest of the stream.
+                hideLoadingOverlay();
+                showStreamIndicator();
             }
         }
 
@@ -1308,7 +1371,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             if (!response.body) {
                 throw new Error('This browser does not support streaming responses.');
             }
-            const filenameFromServer = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'generated_audio.wav';
+            filenameFromServer = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || filenameFromServer;
 
             const reader = response.body.getReader();
             while (true) {
@@ -1347,23 +1410,46 @@ document.addEventListener('DOMContentLoaded', async function () {
 
             // Hand the fully-assembled audio to WaveSurfer exactly like the non-streaming path,
             // so the waveform, seeking, and the download link all work the same afterwards.
+            // scrollToPlayer=false: the indicator already scrolled into view when playback
+            // started, and yanking the scroll again here — mid-playback, possibly mid-typing —
+            // is exactly what D6 says not to do. WaveSurfer itself does not autoplay (see
+            // initializeWaveSurfer), so this handoff does not double up on the still-sounding
+            // scheduled buffers.
             const audioBlob = new Blob(receivedChunks, { type: 'audio/wav' });
             const resultDetails = {
                 outputUrl: URL.createObjectURL(audioBlob), filename: filenameFromServer, genTime: genTime,
                 submittedVoiceMode: jsonData.voice_mode, submittedPredefinedVoice: jsonData.predefined_voice_id,
                 submittedCloneFile: jsonData.reference_audio_filename
             };
-            initializeWaveSurfer(resultDetails.outputUrl, resultDetails);
+            initializeWaveSurfer(resultDetails.outputUrl, resultDetails, false);
             showNotification('Audio generated successfully!', 'success');
+
+            // The fetch is done, but scheduled buffers may still be playing (fast servers can
+            // finish sending well before real-time playback catches up). Keep the "Streaming —
+            // playing" indicator up, and isGenerating true, until the last one actually ends.
+            attachStreamCompletionHandler();
         } catch (error) {
             if (error.name === 'AbortError') {
-                return; // Cancelled by the user — the cancel button already stopped playback.
+                // Cancelled by the user — stopStreamingGeneration() already stopped playback
+                // and reset the UI. Whatever audio arrived before the abort is still worth
+                // keeping: load it into WaveSurfer (not autoplaying) so it can be replayed.
+                if (receivedChunks.length) {
+                    const audioBlob = new Blob(receivedChunks, { type: 'audio/wav' });
+                    const resultDetails = {
+                        outputUrl: URL.createObjectURL(audioBlob), filename: filenameFromServer,
+                        genTime: ((performance.now() - startTime) / 1000).toFixed(2),
+                        submittedVoiceMode: jsonData.voice_mode, submittedPredefinedVoice: jsonData.predefined_voice_id,
+                        submittedCloneFile: jsonData.reference_audio_filename
+                    };
+                    initializeWaveSurfer(resultDetails.outputUrl, resultDetails, false);
+                }
+                return;
             }
             console.error('Streaming TTS Generation Error:', error);
             showNotification(error.message || 'An unknown error occurred during TTS generation.', 'error');
+            finishStreamingPlayback();
         } finally {
             currentAbortController = null;
-            isGenerating = false;
             hideLoadingOverlay();
         }
     }
@@ -1486,17 +1572,18 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
     if (loadingCancelBtn) loadingCancelBtn.addEventListener('click', () => {
         if (isGenerating) {
-            if (currentAbortController) { currentAbortController.abort(); currentAbortController = null; }
-            stopStreamPlayback();
-            isGenerating = false;
-            hideLoadingOverlay();
-            showNotification("Generation UI cancelled by user.", "info");
+            stopStreamingGeneration("Generation UI cancelled by user.");
         }
     });
-    function showLoadingOverlay() {
+    if (streamStopBtn) streamStopBtn.addEventListener('click', () => {
+        stopStreamingGeneration("Streaming stopped.");
+    });
+    function showLoadingOverlay(isStreaming = false) {
         if (loadingOverlay && generateBtn && loadingCancelBtn) {
             loadingMessage.textContent = 'Generating audio...';
-            loadingStatusText.textContent = 'Please wait. This may take some time.';
+            loadingStatusText.textContent = isStreaming
+                ? 'Audio will begin playing as soon as the first chunk is ready.'
+                : 'Please wait. This may take some time.';
             loadingOverlay.style.display = 'flex';
             loadingOverlay.classList.remove('hidden', 'opacity-0'); loadingOverlay.dataset.state = 'open';
             generateBtn.disabled = true; loadingCancelBtn.disabled = false;

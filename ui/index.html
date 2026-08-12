@@ -450,6 +450,19 @@
                     </form>
                 </div>
 
+                <!-- Streaming playback indicator: shown in place of the loading overlay once the
+                     first streamed chunk is scheduled, since audio is already playing at that
+                     point. Replaces the modal for the streaming path only (see script.js). -->
+                <div id="stream-playback-indicator" class="highlight-box mt-8 hidden">
+                    <div class="highlight-box__row">
+                        <div class="model-status">
+                            <span class="status-dot warning"></span>
+                            <span class="model-status__text warning">Streaming &mdash; playing</span>
+                        </div>
+                        <button id="stream-stop-btn" type="button" class="btn danger small">Stop</button>
+                    </div>
+                </div>
+
                 <div id="audio-player-container" class="mt-8"></div>
 
                 <div class="mt-10">
