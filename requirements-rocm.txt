@@ -20,7 +20,7 @@
 # descript-audiotools requires protobuf<3.20).
 conformer==0.3.2
 diffusers==0.29.0
-transformers==4.46.3
+transformers==5.15.0
 einops>=0.7.0
 omegaconf==2.3.0
 resampy==0.4.3
