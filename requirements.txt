@@ -8,9 +8,9 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 
 # --- Deep Learning Framework (CPU-Only) ---
-torch==2.5.1
-torchvision==0.20.1
-torchaudio==2.5.1
+torch==2.13.0
+torchvision==0.28.0
+torchaudio==2.11.0
 
 # --- Core TTS Application ---
 # IMPORTANT: chatterbox-tts is NOT included here. It must be installed
@@ -29,7 +29,7 @@ torchaudio==2.5.1
 # descript-audiotools requires protobuf<3.20).
 conformer==0.3.2
 diffusers==0.29.0
-transformers==4.46.3
+transformers==5.15.0
 # Japanese kanji->hiragana normalization for the multilingual model. Without it,
 # hiragana_normalize() catches ImportError and returns text unchanged - Japanese
 # output degrades silently rather than failing.

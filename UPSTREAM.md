@@ -1,5 +1,18 @@
 # Keeping this fork current
 
+### Dependency pins are deliberate — and deliberately current
+
+`torch >= 2.6.0` is a **security floor**: 2.5.1 and earlier are affected by
+CVE-2025-32434 (RCE via `torch.load`, even with `weights_only=True`), and this
+package calls `torch.load` on `.pt` files fetched from HuggingFace on every
+model load. Do not pin below it when rebasing on devnen, whose own files still
+specify 2.5.1.
+
+Beyond that floor the policy is **newest that works**, not whatever upstream
+declares. `chatterbox`'s metadata says `transformers==5.2.0`; that is a pin, not
+a ceiling, and `--no-deps` means it never binds. If a version here is older than
+current, the commit that set it says which specific thing broke.
+
 Run `pwsh tests/check_upstreams.ps1` to see whether either upstream has moved.
 
 There are two, and they update differently.
