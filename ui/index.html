@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chatterbox TTS Server</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v={{ asset_version | default('0') }}">
     <script src="vendor/wavesurfer.min.js"></script>
 </head>
 
@@ -555,7 +555,7 @@
         </div>
     </div>
 
-    <script src="script.js" defer></script>
+    <script src="script.js?v={{ asset_version | default('0') }}" defer></script>
 </body>
 
 </html>

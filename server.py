@@ -417,7 +417,24 @@ async def get_web_ui(request: Request):
     """Serves the main web interface (index.html)."""
     logger.info("Request received for main UI page ('/').")
     try:
-        return templates.TemplateResponse("index.html", {"request": request})
+        # Cache-busting token for script.js / styles.css. Without it the browser
+        # keeps executing a cached script.js after an update, so UI changes look
+        # like they silently did nothing until the user hard-refreshes. Derived
+        # from the assets' mtimes so it changes exactly when they do.
+        asset_version = "0"
+        try:
+            asset_version = str(
+                max(
+                    int((ui_static_path / name).stat().st_mtime)
+                    for name in ("script.js", "styles.css")
+                    if (ui_static_path / name).is_file()
+                )
+            )
+        except (OSError, ValueError):
+            pass  # a missing/unreadable asset must not take the page down
+        return templates.TemplateResponse(
+            "index.html", {"request": request, "asset_version": asset_version}
+        )
     except Exception as e_render:
         logger.error(f"Error rendering main UI page: {e_render}", exc_info=True)
         return HTMLResponse(
