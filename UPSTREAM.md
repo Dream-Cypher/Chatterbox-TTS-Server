@@ -23,7 +23,7 @@ Updating is a pin bump, not a rebase:
 gh api "repos/resemble-ai/chatterbox/commits?sha=master&per_page=20" `
   --jq '.[] | "\(.commit.author.date[0:10])  \(.sha[0:8])  \(.commit.message | split("\n")[0])"'
 
-# 2. change the SHA in start.py:112 and in tests/check_upstreams.ps1 ($PKG_PINNED)
+# 2. change the SHA in start.py:115 and in tests/check_upstreams.ps1 ($PKG_PINNED)
 
 # 3. reinstall the package only
 python_embedded/python.exe -m pip install --no-deps --force-reinstall `
@@ -37,10 +37,10 @@ python_embedded/python.exe -m pip install --no-deps --force-reinstall `
 # patches are silently skipped. Skipping them is not cosmetic: the server
 # crashes on model load with
 #     perth.PerthImplicitWatermarker() -> "NoneType object is not callable"
-# This bit Task 3 of the original upgrade (see task-3-report.md) the first
-# time the package was reinstalled this way. Reapply both patches directly
-# - they are idempotent, so running them against an already-patched
-# install is a safe no-op (verified both ways - see task-9-report.md):
+# This bit the original upgrade the first time the package was reinstalled
+# this way. Reapply both patches directly - they are idempotent, so running
+# them against an already-patched install is a safe no-op (verified both
+# ways):
 $env:PYTHONIOENCODING = 'utf-8'
 python_embedded/python.exe -c @'
 import sys; sys.path.insert(0, ".")
@@ -60,7 +60,7 @@ pwsh tests/run_matrix.ps1 -Group turbo
 `$env:PYTHONIOENCODING = 'utf-8'` is **not optional** - it works around a console-encoding crash in
 `start.py`'s `print_substep` (Unicode check-mark/warning icons). Without it, step 4 dies partway
 through with `UnicodeEncodeError: 'charmap' codec can't encode character '→'` on a normal
-Windows console (cp1252) - confirmed by running it both ways, see task-9-report.md. It doesn't
+Windows console (cp1252) - confirmed by running it both ways. It doesn't
 change what gets written to disk, only whether the progress output can print - but the exception
 kills the process before every patched file is even attempted, so the guard matters. Once set in a
 `pwsh` session, it stays set for the rest of that session, including step 5.
@@ -89,7 +89,7 @@ If devnen adopts Nano or v3 themselves, drop your commit rather than merging it:
 
 | file | your change | risk |
 |---|---|---|
-| `start.py:112` | `CHATTERBOX_REPO` repointed and pinned | high - single line, they edit it too |
+| `start.py:115` | `CHATTERBOX_REPO` repointed and pinned | high - single line, they edit it too |
 | `engine.py` | Nano selectors, `_load_kwargs_for`, 19-tag list | medium |
 | `requirements*.txt` | package URL, `pykakasi` | medium |
 | `config.yaml` | `model.t3_model` plus local settings | low, but holds local state |

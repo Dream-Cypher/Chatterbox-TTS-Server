@@ -3,7 +3,7 @@
 #
 #   pwsh tests/check_upstreams.ps1
 
-$PKG_PINNED = '5de7a54aa4e5e2baadb0182dde554908b48b85c2'  # keep in sync with start.py:112
+$PKG_PINNED = '5de7a54aa4e5e2baadb0182dde554908b48b85c2'  # keep in sync with start.py:115
 $SRV_BASE   = '915ae289340e10c6047f27f47e22eae9bf350c32'  # devnen main at fork time
 
 function Report {
@@ -56,5 +56,5 @@ function Report {
 Report -Label 'PACKAGE  (v3/Nano/models land here)' -Repo 'resemble-ai/chatterbox' -Branch 'master' -Since $PKG_PINNED
 Report -Label 'SERVER   (this fork is based on it)'  -Repo 'devnen/Chatterbox-TTS-Server' -Branch 'main' -Since $SRV_BASE
 
-Write-Host "`nPackage update  : bump the SHA in start.py:112 and here, reinstall, re-run the tests."
+Write-Host "`nPackage update  : bump the SHA in start.py:115 and here, reinstall, re-run the tests."
 Write-Host "Server update   : git fetch upstream; git rebase upstream/main. See UPSTREAM.md."

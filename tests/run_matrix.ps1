@@ -13,7 +13,6 @@ param(
     [int]$Seed = 424242
 )
 
-$root = Split-Path $PSScriptRoot -Parent
 $out  = Join-Path $PSScriptRoot 'out'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $manifest = Join-Path $out 'manifest.csv'
