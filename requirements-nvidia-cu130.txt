@@ -32,6 +32,10 @@ torchaudio==2.10.0
 conformer==0.3.2
 diffusers==0.29.0
 transformers==4.46.3
+# Japanese kanji->hiragana normalization for the multilingual model. Without it,
+# hiragana_normalize() catches ImportError and returns text unchanged - Japanese
+# output degrades silently rather than failing.
+pykakasi==2.3.0
 einops>=0.7.0
 omegaconf==2.3.0
 resampy==0.4.3
