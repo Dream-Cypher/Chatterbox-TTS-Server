@@ -800,10 +800,11 @@ The server relies exclusively on `config.yaml` for runtime configuration.
 **Model selection:** set `model.repo_id` to one of:
 
 - `chatterbox` (or `original`) — Original 0.5B English model with emotion exaggeration.
-- `chatterbox-turbo` (or `turbo`) — 350M Turbo model with paralinguistic tags (`[laugh]`, `[cough]`, `[chuckle]`).
+- `chatterbox-turbo` (or `turbo`) — 350M Turbo model with 19 paralinguistic tags (`[laugh]`, `[whispering]`, `[angry]`, etc. — full list at `GET /api/model-info`).
+- `chatterbox-nano` (or `nano`) — Smaller GPT2-small-backbone sibling of Turbo (~1.9GB vs ~3.0GB), same 19 paralinguistic tags.
 - `chatterbox-multilingual` (or `multilingual`) — 0.5B multilingual model with 23-language support.
 
-All three are hot-swappable from the Web UI engine dropdown without a server restart.
+All four are hot-swappable from the Web UI engine dropdown without a server restart. Turbo and Nano both ignore `exaggeration` and `cfg_weight`; Original and Multilingual don't support paralinguistic tags.
 
 ## 🔐 Security
 
@@ -1073,28 +1074,28 @@ docker compose -f docker-compose-cu128.yml up -d --build
 
 The most intuitive way to use the server:
 
-*   **Engine Selector:** Use the dropdown at the top to switch between **Original Chatterbox** and **Chatterbox‑Turbo**. The backend auto-loads the selected engine.
+*   **Engine Selector:** Use the dropdown at the top to switch between **Original Chatterbox**, **Chatterbox Multilingual**, **Chatterbox‑Turbo**, and **Chatterbox Nano**. The backend auto-loads the selected engine.
 *   **Text Input:** Enter your plain text script. **For audiobooks:** Simply paste the entire book text - the chunking system will automatically handle long texts and create seamless audio output.   
 *   **Voice Mode:** Choose:
     *   `Predefined Voices`: Select a curated voice from the `./voices` directory.
     *   `Voice Cloning`: Select an uploaded reference file from `./reference_audio`.
-*   **Presets:** Load examples from `ui/presets.yaml`. New presets demonstrate Turbo's paralinguistic tags.
+*   **Presets:** Load examples from `ui/presets.yaml`. New presets demonstrate Turbo/Nano's paralinguistic tags.
 *   **Reference/Predefined Audio Management:** Import new files and refresh lists.
-*   **Generation Parameters:** Adjust Temperature, Exaggeration, CFG Weight, Speed Factor, Seed. Save defaults to `config.yaml`.
+*   **Generation Parameters:** Adjust Temperature, Exaggeration, CFG Weight, Speed Factor, Seed. Save defaults to `config.yaml`. Exaggeration and CFG Weight are hidden for Turbo/Nano, which ignore them.
 *   **Chunking Controls:** Toggle "Split text into chunks" and adjust "Chunk Size" for long texts.
 *   **Server Configuration:** View/edit parts of `config.yaml` (requires server restart for some changes).
 *   **Audio Player:** Play generated audio with waveform visualization.
 
-### Using Paralinguistic Tags (Turbo)
+### Using Paralinguistic Tags (Turbo / Nano)
 
-When the engine selector is set to **Chatterbox‑Turbo**, you can include paralinguistic tags inline:
+When the engine selector is set to **Chatterbox‑Turbo** or **Chatterbox Nano**, you can include paralinguistic tags inline:
 
 ```
 Hi there [chuckle] — thanks for calling back.
 One moment… [cough] sorry about that. Let's get this fixed.
 ```
 
-Turbo supports native tags like `[laugh]`, `[cough]`, and `[chuckle]` for more realistic, expressive speech. These tags are ignored when using Original Chatterbox.
+Turbo and Nano support 19 native tags — including `[laugh]`, `[cough]`, `[chuckle]`, `[whispering]`, `[angry]`, `[happy]`, `[sarcastic]`, `[crying]`, `[surprised]`, `[fear]`, `[dramatic]`, `[narration]` — for more realistic, expressive speech. The full list is served at runtime by `GET /api/model-info` as `available_paralinguistic_tags`. These tags are ignored when using Original Chatterbox or Chatterbox Multilingual.
 
 ### API Endpoints (`/docs` for interactive details)
 

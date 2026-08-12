@@ -99,28 +99,12 @@
                                 </div>
                             </div>
 
-                            <!-- Paralinguistic Tags Section (Turbo only) -->
+                            <!-- Paralinguistic Tags Section (Turbo and Nano only). Buttons are built dynamically
+                                 from available_paralinguistic_tags in the /api/model-info response — see
+                                 populateTagButtons() in script.js. Do not hardcode tag buttons here. -->
                             <div id="paralinguistic-tags-section" class="form-group hidden">
-                                <div class="flex-row flex-wrap items-center gap-2">
+                                <div id="tag-buttons-container" class="flex-row flex-wrap items-center gap-2">
                                     <span class="form-label mr-2">Insert Tag:</span>
-                                    <button type="button" class="tag-btn" data-tag="[laugh]"
-                                        title="Insert [laugh] tag">😄 laugh</button>
-                                    <button type="button" class="tag-btn" data-tag="[chuckle]"
-                                        title="Insert [chuckle] tag">😊 chuckle</button>
-                                    <button type="button" class="tag-btn" data-tag="[sigh]"
-                                        title="Insert [sigh] tag">😮‍💨 sigh</button>
-                                    <button type="button" class="tag-btn" data-tag="[gasp]" title="Insert [gasp] tag">😲
-                                        gasp</button>
-                                    <button type="button" class="tag-btn" data-tag="[cough]"
-                                        title="Insert [cough] tag">🤧 cough</button>
-                                    <button type="button" class="tag-btn" data-tag="[clear throat]"
-                                        title="Insert [clear throat] tag">🗣️ clear throat</button>
-                                    <button type="button" class="tag-btn" data-tag="[sniff]"
-                                        title="Insert [sniff] tag">👃 sniff</button>
-                                    <button type="button" class="tag-btn" data-tag="[groan]"
-                                        title="Insert [groan] tag">😩 groan</button>
-                                    <button type="button" class="tag-btn" data-tag="[shush]"
-                                        title="Insert [shush] tag">🤫 shush</button>
                                 </div>
                                 <p class="form-hint mt-2">Click a tag to insert it at your cursor position. Tags produce
                                     natural vocal reactions in the generated audio.</p>
@@ -347,9 +331,12 @@
                                     <div id="server-config-form">
                                         <p class="form-hint mb-4">
                                             These settings are loaded from <code class="code">config.yaml</code> via an
-                                            API call.
-                                            <strong>Restart the server</strong> to apply changes to Host, Port, Model,
-                                            or Path settings if modified here or directly in the file.
+                                            API call. <strong>TTS Device, Default Voice ID, Audio Output Format, Audio
+                                            Sample Rate, and Save-to-disk</strong> can be changed and saved right here.
+                                            <strong>Server Host, Server Port, Model Cache Path, Predefined Voices Path,
+                                            Reference Audio Path, and Output Path</strong> are read-only in this form —
+                                            change them in <code class="code">config.yaml</code> directly, then
+                                            <strong>restart the server</strong> to apply them.
                                         </p>
                                         <div class="form-grid">
                                             <div class="form-group">
@@ -367,8 +354,12 @@
                                             <div class="form-group">
                                                 <label for="config-tts-engine-device" class="form-label small">TTS
                                                     Device</label>
-                                                <input type="text" id="config-tts-engine-device"
-                                                    name="tts_engine.device" class="form-input small">
+                                                <select id="config-tts-engine-device" name="tts_engine.device"
+                                                    class="form-select small">
+                                                    <option value="auto">auto</option>
+                                                    <option value="cuda">cuda</option>
+                                                    <option value="cpu">cpu</option>
+                                                </select>
                                             </div>
                                             <div class="form-group">
                                                 <label for="config-tts-engine-default_voice_id"
@@ -403,8 +394,12 @@
                                             <div class="form-group">
                                                 <label for="config-audio_output-format" class="form-label small">Audio
                                                     Output Format</label>
-                                                <input type="text" id="config-audio_output-format"
-                                                    name="audio_output.format" class="form-input small">
+                                                <select id="config-audio_output-format" name="audio_output.format"
+                                                    class="form-select small">
+                                                    <option value="wav">wav</option>
+                                                    <option value="opus">opus</option>
+                                                    <option value="mp3">mp3</option>
+                                                </select>
                                             </div>
                                             <div class="form-group">
                                                 <label for="config-audio_output-sample_rate"
@@ -465,9 +460,10 @@
                                     fine-tune output.</li>
                                 <li>Adjusting <strong>Speed Factor</strong> away from 1.0 is experimental and may cause
                                     echo.</li>
-                                <li>When using <strong>Turbo</strong> model, you can insert paralinguistic tags like
-                                    <code class="code">[laugh]</code> or <code class="code">[sigh]</code> for natural
-                                    vocal reactions.
+                                <li>When using the <strong>Turbo</strong> or <strong>Nano</strong> models, you can
+                                    insert paralinguistic tags like <code class="code">[laugh]</code> or
+                                    <code class="code">[whispering]</code> for natural vocal reactions. These models
+                                    ignore Exaggeration and CFG Weight, so those controls are hidden.
                                 </li>
                                 <li>Check the <code class="code">/docs</code> endpoint for API details.</li>
                             </ul>

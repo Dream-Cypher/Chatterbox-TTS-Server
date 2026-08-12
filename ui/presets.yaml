@@ -6,9 +6,13 @@
 # ============================================================================
 # ⚡ TURBO MODEL DEMONSTRATIONS (Paralinguistic Tags)
 # ============================================================================
-# These presets utilize tags supported ONLY by the Chatterbox Turbo model.
-# Tags: [laugh], [chuckle], [sigh], [gasp], [cough], [clear throat], [sniff], [groan], [shush]
-# If used with the Original model, these tags will be spoken literally or be ignored.
+# These presets utilize tags supported by the Chatterbox Turbo and Nano models (not Original
+# or Multilingual). The full, authoritative list is served at runtime by GET /api/model-info
+# as available_paralinguistic_tags (19 tags as of this writing):
+# [advertisement], [angry], [chuckle], [clear throat], [cough], [crying], [dramatic], [fear],
+# [gasp], [groan], [happy], [laugh], [narration], [sarcastic], [shush], [sigh], [sniff],
+# [surprised], [whispering]
+# If used with the Original or Multilingual model, these tags will be spoken literally or ignored.
 
 - name: "⚡ Turbo: Tech Support Meltdown"
   text: |
@@ -94,6 +98,39 @@
     temperature: 0.8
     exaggeration: 1.25
     cfg_weight: 0.6
+    seed: 0
+    speed_factor: 1.0
+    language: "en"
+
+- name: "⚡ Turbo: The Passive-Aggressive Performance Review"
+  text: |
+    [sarcastic] Oh, I just love your work, truly, it's very... creative. [dramatic] Let's talk about the quarterly report, shall we? [angry] You submitted it four days late, and when I opened it, half the numbers were in the wrong column! [sarcastic] But sure, "the dog ate my spreadsheet," very original excuse. [dramatic] Do you understand what this means for the department? For my career? [angry] I had to explain to the board why our projections looked like modern art! [sarcastic] Bold choice, really, very avant-garde. [happy] But you know what, let's not dwell on the negative. [sarcastic] I'm sure next quarter will be a masterpiece too. [dramatic] I have put my faith in you before, and look where that got us. [happy] Anyway! Moving on to the fun part of this meeting, your bonus. [sarcastic] Oh wait, there isn't one. [dramatic] How tragic. [angry] Get it right next time. [happy] Have a wonderful rest of your day!
+  params:
+    temperature: 0.85
+    exaggeration: 1.3
+    cfg_weight: 0.6
+    seed: 0
+    speed_factor: 1.0
+    language: "en"
+
+- name: "⚡ Turbo: True Crime Podcast Cold Open"
+  text: |
+    [narration] On a quiet street in a town where nothing ever happens, something happened. [dramatic] It was just past midnight when Mrs. Halloway noticed her porch light flickering in a pattern that was, by her own account, "too regular to be natural." [narration] She would later tell investigators that she almost went back inside. Almost. [fear] Instead, she stepped closer to the window, and that's when she saw the figure standing motionless at the edge of her lawn. [surprised] It wasn't moving. It wasn't leaving. [narration] For eleven minutes, according to her doorbell camera timestamp, the figure simply stood there in the rain. [fear] Mrs. Halloway called the police, hands shaking so badly she dropped the phone twice. [narration] By the time officers arrived seven minutes later, the figure was gone. [surprised] But so was something else, something nobody noticed until the next morning. [dramatic] The garden gate, rusted shut for eleven years, stood wide open. [narration] This is the story of what happened next.
+  params:
+    temperature: 0.75
+    exaggeration: 0.9
+    cfg_weight: 0.55
+    seed: 0
+    speed_factor: 1.0
+    language: "en"
+
+- name: "⚡ Turbo: Late Night Whispered Confession"
+  text: |
+    [whispering] Hey. Hey, are you awake? [whispering] I need to tell you something and I can't say it any louder than this. [whispering] I've been thinking about what you said earlier, and... [crying] I didn't mean to laugh it off like that. I'm sorry. [whispering] I was scared, that's all, I get scared and I make jokes and it's a terrible habit. [surprised] Wait, you're actually listening? [whispering] Okay. Okay, here it is. [crying] I've been so afraid of losing this, of losing you, that I forgot to just say how I feel. [whispering] So I'm saying it now, quietly, in the dark, because that's apparently the only way I can manage it. [happy] I love you. [whispering] There. I said it. [happy] I actually said it! [whispering] Now please go back to sleep before I lose my nerve and take it all back.
+  params:
+    temperature: 0.78
+    exaggeration: 0.8
+    cfg_weight: 0.5
     seed: 0
     speed_factor: 1.0
     language: "en"

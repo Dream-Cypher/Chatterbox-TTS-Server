@@ -505,6 +505,12 @@ summary::marker {
     font-size: var(--text-sm);
 }
 
+.form-select.small {
+    font-size: var(--text-sm);
+    padding-top: var(--space-1);
+    padding-bottom: var(--space-1);
+}
+
 .form-textarea {
     display: block;
     width: 100%;

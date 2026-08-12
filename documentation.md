@@ -173,29 +173,37 @@ The Chatterbox TTS Server is a self-hostable application designed to provide an 
 
 ### 2.2 Core Engine: Chatterbox TTS
 
-The server uses the **`chatterbox-tts`** engine family developed by Resemble AI, via the `devnen/chatterbox-v2` fork. Three model variants are supported and hot-swappable at runtime through the Web UI engine dropdown (no restart required). The selected model is configured via `model.repo_id` in `config.yaml`.
+The server uses the **`chatterbox-tts`** engine family developed by Resemble AI, via the `devnen/chatterbox-v2` fork. Four model variants are supported and hot-swappable at runtime through the Web UI engine dropdown (no restart required). The selected model is configured via `model.repo_id` in `config.yaml`.
 
 **2.2.1 Original Chatterbox** (`model.repo_id: chatterbox`)
 
 - 0.5B-parameter LLaMA-backed model trained on 0.5M hours of cleaned data.
 - English only. High fidelity, strong voice cloning, supports `exaggeration` and `cfg_weight` parameters for emotion control.
+- No paralinguistic tag support.
 - Best choice when English quality is the priority and multilingual is not needed.
 
 **2.2.2 Chatterbox Turbo** (`model.repo_id: chatterbox-turbo`)
 
 - 350M-parameter streamlined variant. Distills the speech-token-to-mel diffusion decoder from 10 steps to 1, removing a major inference bottleneck.
-- Supports **paralinguistic tags** in the input text: `[laugh]`, `[cough]`, `[chuckle]`, plus text-based prompting for sigh / gasp / cough reactions.
+- Supports 19 **paralinguistic tags** as real tokenizer tokens typed inline in the text — not text-based prompting: `[advertisement]`, `[angry]`, `[chuckle]`, `[clear throat]`, `[cough]`, `[crying]`, `[dramatic]`, `[fear]`, `[gasp]`, `[groan]`, `[happy]`, `[laugh]`, `[narration]`, `[sarcastic]`, `[shush]`, `[sigh]`, `[sniff]`, `[surprised]`, `[whispering]`. The authoritative list is exposed at runtime via `GET /api/model-info` as `available_paralinguistic_tags`.
 - Ignores `exaggeration`, `cfg_weight`, and `min_p` parameters (the model API does not take them) — the server logs a warning when these are passed and proceeds with the supported subset.
 - Best choice for real-time / agent workflows where latency matters more than absolute fidelity.
 
-**2.2.3 Chatterbox Multilingual** (`model.repo_id: chatterbox-multilingual`)
+**2.2.3 Chatterbox Nano** (`model.repo_id: chatterbox-nano`)
+
+- Smaller `GPT2_small`-backbone variant of Turbo (~1.9GB vs Turbo's ~3.0GB), for the tightest latency/VRAM budget.
+- Supports the same 19 paralinguistic tags as Turbo.
+- Also ignores `exaggeration`, `cfg_weight`, and `min_p` for the same reason as Turbo.
+- Best choice when Turbo is still too heavy for the target hardware.
+
+**2.2.4 Chatterbox Multilingual** (`model.repo_id: chatterbox-multilingual`)
 
 - 0.5B-parameter variant trained on 23 languages: Arabic, Chinese, Danish, Dutch, English, Finnish, French, German, Greek, Hebrew, Hindi, Italian, Japanese, Korean, Malay, Norwegian, Polish, Portuguese, Russian, Spanish, Swahili, Swedish, Turkish.
-- Zero-shot voice cloning across languages, plus emotion exaggeration.
+- Zero-shot voice cloning across languages, plus emotion exaggeration (honours `exaggeration` and `cfg_weight`). No paralinguistic tag support.
 - The `language` parameter on `/tts` selects the target language (ISO 639-1 code, e.g. `"de"`, `"ja"`). The Web UI populates the dropdown from `SUPPORTED_LANGUAGES` exposed by the loaded engine.
 - Best choice for international content; trades some English-specific fidelity for broad language coverage.
 
-**Important Note on Text Input:** The engine processes **plain text** plus the Turbo-only paralinguistic tags described above. It does **not** support speaker-differentiation tags like `[S1]` / `[S2]`. The synthesis is single-speaker, driven by the selected voice mode (predefined or cloned).
+**Important Note on Text Input:** The engine processes **plain text** plus the Turbo/Nano-only paralinguistic tags described above. It does **not** support speaker-differentiation tags like `[S1]` / `[S2]`. The synthesis is single-speaker, driven by the selected voice mode (predefined or cloned).
 
 ### 2.3 Key Server Features
 
@@ -468,7 +476,7 @@ The following table describes the main sections and some key parameters you migh
 |                       | `log_file_backup_count`       | integer       | Number of backup log files to keep.                                                                           | `5`                      |
 |                       | `ssl_certfile`                | string/null   | Path to SSL certificate file for HTTPS. Leave `null` to serve plain HTTP.                                     | `null`                   |
 |                       | `ssl_keyfile`                 | string/null   | Path to SSL private key file. Must be set together with `ssl_certfile`.                                       | `null`                   |
-| **`model`**           | `repo_id`                     | string        | Selects the engine: `chatterbox` / `original`, `chatterbox-turbo` / `turbo`, or `chatterbox-multilingual` / `multilingual`. Hot-swappable from the UI. | `chatterbox-turbo`       |
+| **`model`**           | `repo_id`                     | string        | Selects the engine: `chatterbox` / `original`, `chatterbox-turbo` / `turbo`, `chatterbox-nano` / `nano`, or `chatterbox-multilingual` / `multilingual`. Hot-swappable from the UI. | `chatterbox-turbo`       |
 | **`tts_engine`**      | `device`                      | string        | TTS processing device: `auto`, `cuda`, `mps`, or `cpu`. `auto` attempts CUDA, then MPS, falls back to CPU.     | `auto`                   |
 |                       | `predefined_voices_path`      | string        | Directory for predefined voice audio files.                                                                   | `voices`                 |
 |                       | `reference_audio_path`        | string        | Directory for user-uploaded reference audio files for voice cloning.                                          | `reference_audio`        |

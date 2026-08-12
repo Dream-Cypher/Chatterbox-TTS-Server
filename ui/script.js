@@ -135,7 +135,52 @@ document.addEventListener('DOMContentLoaded', async function () {
     const modelStatusText = document.getElementById('model-status-text');
     const applyModelBtn = document.getElementById('apply-model-btn');
     const paralinguisticTagsSection = document.getElementById('paralinguistic-tags-section');
-    const tagButtons = document.querySelectorAll('.tag-btn');
+    const tagButtonsContainer = document.getElementById('tag-buttons-container');
+
+    // Decorative emoji for paralinguistic tag buttons. Purely cosmetic — if a tag reported by
+    // /api/model-info isn't in this map, its button is still built, just without an emoji.
+    const TAG_EMOJI = {
+        'advertisement': '📢',
+        'angry': '😠',
+        'chuckle': '😊',
+        'clear throat': '🗣️',
+        'cough': '🤧',
+        'crying': '😢',
+        'dramatic': '🎭',
+        'fear': '😨',
+        'gasp': '😲',
+        'groan': '😩',
+        'happy': '😃',
+        'laugh': '😄',
+        'narration': '📖',
+        'sarcastic': '😏',
+        'shush': '🤫',
+        'sigh': '😮‍💨',
+        'sniff': '👃',
+        'surprised': '😮',
+        'whispering': '🤐'
+    };
+
+    // Build the "Insert Tag" buttons from the server's available_paralinguistic_tags list
+    // (GET /api/model-info) instead of hardcoding them, so the UI can't drift from the engine's
+    // actual tag set again. Re-run whenever the loaded model changes.
+    function populateTagButtons(tags) {
+        if (!tagButtonsContainer) return;
+        // Keep the "Insert Tag:" label, drop any previously built buttons.
+        tagButtonsContainer.querySelectorAll('.tag-btn').forEach(btn => btn.remove());
+        (tags || []).forEach(tag => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'tag-btn';
+            const bracketedTag = `[${tag}]`;
+            button.dataset.tag = bracketedTag;
+            button.title = `Insert ${bracketedTag} tag`;
+            const emoji = TAG_EMOJI[tag];
+            button.textContent = emoji ? `${emoji} ${tag}` : tag;
+            button.addEventListener('click', () => insertTagAtCursor(bracketedTag));
+            tagButtonsContainer.appendChild(button);
+        });
+    }
 
 
     // Handle voice mode selection visual feedback
@@ -366,9 +411,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         const exaggerationGroup = document.getElementById('exaggeration-group');
         const cfgWeightGroup = document.getElementById('cfg-weight-group');
 
-        // Show/hide paralinguistic tags section (Turbo and Nano only)
+        // Show/hide paralinguistic tags section (Turbo and Nano only) and (re)build its buttons
+        // from the model-reported tag list.
         if (paralinguisticTagsSection) {
             if ((modelInfo.type === 'turbo' || modelInfo.type === 'nano') && modelInfo.supports_paralinguistic_tags) {
+                populateTagButtons(modelInfo.available_paralinguistic_tags);
                 paralinguisticTagsSection.classList.remove('hidden');
             } else {
                 paralinguisticTagsSection.classList.add('hidden');
@@ -765,15 +812,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             applyModelBtn.addEventListener('click', applyModelChange);
         }
 
-        // NEW: Tag button listeners
-        tagButtons.forEach(button => {
-            button.addEventListener('click', (e) => {
-                const tag = e.currentTarget.getAttribute('data-tag');
-                if (tag) {
-                    insertTagAtCursor(tag);
-                }
-            });
-        });
+        // Tag button click listeners are attached in populateTagButtons(), since the buttons
+        // are rebuilt from the API response whenever the loaded model changes.
     }
 
     // --- Dynamic UI Population ---
@@ -839,11 +879,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!presetsContainer || !appPresets) return;
 
         // Filter presets based on current model
-        // Hide "Turbo" presets when Chatterbox-Original is loaded
+        // Hide "Turbo" presets (tag demonstrations) when Original/Multilingual is loaded, since
+        // those models don't support paralinguistic tags. Match on "turbo" anywhere in the name
+        // (not startsWith) because these preset names are prefixed with the "⚡" emoji.
         let filteredPresets = appPresets;
         if (currentModelInfo && currentModelInfo.type !== 'turbo' && currentModelInfo.type !== 'nano') {
             filteredPresets = appPresets.filter(preset =>
-                !preset.name.toLowerCase().startsWith('turbo')
+                !preset.name.toLowerCase().includes('turbo')
             );
         }
 
@@ -1255,10 +1297,12 @@ document.addEventListener('DOMContentLoaded', async function () {
             "audio_output.save_to_disk": currentConfig.audio_output?.save_to_disk
         };
         for (const name in fieldsToDisplay) {
-            const input = serverConfigForm.querySelector(`input[name="${name}"]`);
+            // Match both <input> and <select> — tts_engine.device and audio_output.format are
+            // <select> elements, the rest are <input>.
+            const input = serverConfigForm.querySelector(`[name="${name}"]`);
             if (input) {
                 input.value = fieldsToDisplay[name] !== undefined ? fieldsToDisplay[name] : '';
-                if (name.includes('.host') || name.includes('.port') || name.includes('.device') || name.includes('paths.')) input.readOnly = true;
+                if (name.includes('.host') || name.includes('.port') || name.includes('paths.')) input.readOnly = true;
                 else input.readOnly = false;
             }
         }
