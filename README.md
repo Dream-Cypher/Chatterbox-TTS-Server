@@ -32,6 +32,36 @@ This server is based on the architecture and UI of our [Dia-TTS-Server](https://
 
 ## 🆕 What's New
 
+### 🍴 This fork (Dream-Cypher), 2026-08-12
+
+Everything below this section is upstream devnen's release history and is left as written — the
+counts there ("all three models") were accurate for the releases they describe. This fork adds a
+fourth model and brings the dependencies current.
+
+- **Chatterbox‑Nano** is now selectable (`model.repo_id: chatterbox-nano`). It shares Turbo's class
+  and its paralinguistic tags in 110M parameters. Measured here at ~1.0–1.2x realtime on CPU
+  (24-core i9-13900K), against upstream's "3x on 8 cores" claim — and ~4x realtime on a 4090.
+- **Multilingual v3** is now selectable via a new `model.t3_model` key (`"v3"`, or empty for
+  upstream's v2 default). `engine.py` previously called `from_pretrained()` with no kwargs, so both
+  of these upstream features were unreachable regardless of which package version was installed.
+- **All 19 paralinguistic tags are advertised**, not 9. The omitted ten were every *emotional* one
+  — `[angry]`, `[happy]`, `[crying]`, `[fear]`, `[surprised]`, `[sarcastic]`, `[whispering]`,
+  `[dramatic]`, `[narration]`, `[advertisement]`. They always worked; nothing exposed them. The UI
+  now builds its tag buttons from the API rather than a hardcoded copy, and a test checks the list
+  against the model checkpoint itself.
+- **The package comes from `resemble-ai/chatterbox` upstream**, pinned by commit, instead of a
+  third-party copy frozen at 2026-03-26 that predates both Nano and v3.
+- **torch ≥ 2.6.0 is enforced as a security floor.** 2.5.1 and earlier are affected by
+  **CVE-2025-32434** (RCE via `torch.load`, *even with `weights_only=True`*), and this package calls
+  `torch.load` on `.pt` files downloaded from HuggingFace on every model load. Current pins are
+  torch 2.13.0 / transformers 5.15.0. `tests/check_upstreams.ps1` fails the build if any pin drops
+  below the floor.
+- **UI corrections:** `tts_engine.device` and `audio_output.format` are editable dropdowns rather
+  than read-only text; `exaggeration` / `cfg_weight` are hidden on Turbo and Nano, which ignore
+  them; and UI assets are cache-busted, so an update actually reaches the browser.
+
+See [`UPSTREAM.md`](UPSTREAM.md) for how this fork tracks its two upstreams.
+
 ### 🚀 v2.0.0 highlights (new)
 
 v2.0 ships the complete Chatterbox family on every major GPU stack behind one OpenAI-compatible API and Web UI. The headline themes:
@@ -150,14 +180,16 @@ This server application enhances the underlying `chatterbox-tts` engine with the
 **🚀 Core Functionality:**
 
 *   **Multi-Engine Support:**
-    *   Choose between **Original Chatterbox**, **Chatterbox Multilingual**, and **Chatterbox‑Turbo** via a hot-swappable engine selector in the Web UI.
-    *   **Original Chatterbox** provides high-quality English output with emotion exaggeration control (0.5B parameters).
-    *   **Chatterbox Multilingual** offers 23-language support with voice cloning and emotion control (0.5B parameters).
+    *   Choose between **Original Chatterbox**, **Chatterbox Multilingual**, **Chatterbox‑Turbo** and **Chatterbox‑Nano** via a hot-swappable engine selector in the Web UI.
+    *   **Original Chatterbox** provides high-quality English output with emotion exaggeration control (0.5B parameters). It is the only model that honours `exaggeration` / `cfg_weight`, and the only one with no paralinguistic tags.
+    *   **Chatterbox Multilingual** offers 23-language support with voice cloning and emotion control (0.5B parameters). Set `model.t3_model: "v3"` in `config.yaml` for the v3 checkpoint; empty keeps upstream's v2 default.
     *   **Chatterbox Turbo** delivers significantly faster inference with a streamlined 350M-parameter architecture and paralinguistic tags.
-    *   All three models are hot-swappable—simply select from the dropdown without restarts or config changes.
-*   **Paralinguistic Tags (Turbo):**
-    *   Write native tags like `[laugh]`, `[cough]`, and `[chuckle]` directly in your text when using Chatterbox‑Turbo.
-    *   New presets demonstrate paralinguistic prompting for agent-style scripts and expressive narration.
+    *   **Chatterbox Nano** shares Turbo's architecture and tags in 110M parameters, and is the option to reach for when running on CPU.
+    *   All four models are hot-swappable—simply select from the dropdown without restarts or config changes.
+*   **Paralinguistic Tags (Turbo and Nano):**
+    *   Write native tags directly in your text — all **19** the checkpoint defines: `[advertisement]`, `[angry]`, `[chuckle]`, `[clear throat]`, `[cough]`, `[crying]`, `[dramatic]`, `[fear]`, `[gasp]`, `[groan]`, `[happy]`, `[laugh]`, `[narration]`, `[sarcastic]`, `[shush]`, `[sigh]`, `[sniff]`, `[surprised]`, `[whispering]`.
+    *   The Web UI's tag buttons are built from `available_paralinguistic_tags` in `GET /api/model-info`, so they always match the loaded model rather than a hardcoded list.
+    *   Presets demonstrate paralinguistic prompting for agent-style scripts and expressive narration.
 *   **Large Text Processing (Chunking):**
     *   Automatically handles long plain text inputs by intelligently splitting them into smaller chunks based on sentence boundaries.
     *   Processes each chunk individually and seamlessly concatenates the resulting audio, overcoming potential generation limits of the TTS engine.
@@ -198,8 +230,8 @@ This server application enhances the underlying `chatterbox-tts` engine with the
 *   **Core Chatterbox Capabilities (via [Resemble AI Chatterbox](https://github.com/resemble-ai/chatterbox)):**
     *   🗣️ High-quality single-speaker voice synthesis from plain text.
     *   🎤 Perform voice cloning using reference audio prompts.
-    *   🎯 **Complete model family:** Original Chatterbox (English, emotion control), Chatterbox Multilingual (23 languages), and Chatterbox‑Turbo (fastest, paralinguistic tags).
-    *   🔄 **Hot-swappable engines:** Switch between all three models instantly via dropdown—no restarts needed.
+    *   🎯 **Complete model family:** Original Chatterbox (English, emotion control), Chatterbox Multilingual (23 languages, v2 or v3), Chatterbox‑Turbo (fast, paralinguistic tags) and Chatterbox‑Nano (110M, same tags, CPU-friendly).
+    *   🔄 **Hot-swappable engines:** Switch between all four models instantly via dropdown—no restarts needed.
 *   **Enhanced Server & API:**
     *   ⚡ Built with the high-performance **[FastAPI](https://fastapi.tiangolo.com/)** framework.
     *   ⚙️ **Custom API Endpoint** (`/tts`) as the primary method for programmatic generation, exposing all key parameters.
