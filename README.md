@@ -828,7 +828,7 @@ The server relies exclusively on `config.yaml` for runtime configuration.
 
 *   `server`: `host`, `port`, logging settings.
 *   `model`: `repo_id` (e.g., "ResembleAI/chatterbox").
-*   `tts_engine`: `device` ('auto', 'cuda', 'mps', 'cpu'), `predefined_voices_path`, `reference_audio_path`, `default_voice_id`.
+*   `tts_engine`: `device` ('auto', 'cuda', 'mps', 'cpu'), `cpu_threads` (torch CPU thread count, default `6` — see [CPU thread count](#-cpu-thread-count) below), `predefined_voices_path`, `reference_audio_path`, `default_voice_id`.
 *   `paths`: `model_cache` (for `download_model.py`), `output`.
 *   `generation_defaults`: Default UI values for `temperature`, `exaggeration`, `cfg_weight`, `seed`, `speed_factor`, `language`.
 *   `audio_output`: `format`, `sample_rate`, `max_reference_duration_sec`.
@@ -879,6 +879,44 @@ The server defaults are tuned for safety and broad compatibility. The following 
 - **Chunk size** — `chunk_size` parameter on `/tts` (50–500, default 120). Larger chunks = fewer requests but more VRAM per call. The chunker respects sentence boundaries either way.
 - **Streaming** — `stream: true` on `/tts` for long-form input (audiobooks, multi-paragraph content). See the API section above for the chunk-level caveat. The Web UI exposes this as the "Stream (start playing sooner)" checkbox next to Generate.
 - **HTTPS** — set `server.ssl_certfile` and `server.ssl_keyfile` in `config.yaml` for direct HTTPS without putting a reverse proxy in front.
+
+### 🧵 CPU thread count
+
+On CPU, torch defaults to `torch.set_num_threads()` = every physical core (24 on the machine this
+was measured on), which pegs the CPU and spins the fans for no speed benefit. `tts_engine.cpu_threads`
+in `config.yaml` (default **6**) caps this. Set it to `0` to leave torch's default alone.
+
+Measured with Nano + voice cloning on CPU, one utterance (5.96s of audio), thread count swept:
+
+| threads | generate | realtime | CPU burned |
+|---|---|---|---|
+| 1 | 11.33s | 0.53x | 11.1s |
+| 2 | 6.78s | 0.88x | 13.4s |
+| 4 | 7.16s | 0.83x | 27.7s |
+| **6** | 4.48s | **1.33x** | **26.2s** |
+| 8 | 4.30s | 1.39x | 33.7s |
+| 12 | 4.93s | 1.21x | 57.8s |
+| 16 | 4.59s | 1.30x | 72.1s |
+| 24 (torch default) | 4.44s | 1.34x | 105.0s |
+| 32 | 5.10s | 1.17x | 141.3s |
+
+Speed plateaus at ~8 threads; CPU cost keeps climbing linearly. 6 threads is 14% **faster** than
+torch's 24-thread default while burning **4x less CPU**.
+
+At 6 threads, across models (same text, same clone reference):
+
+| model | realtime | CPU burned |
+|---|---|---|
+| Nano | **1.37x** | 25.5s |
+| Turbo | 0.67x | 50.0s |
+| Original | 0.32x | 122.2s |
+
+Turbo was also measured at 16 and 24 threads: 0.65x and 0.67x — **flat**, while CPU went
+50 → 138 → 201s. More cores do not rescue it. **Nano is the only model that holds realtime on CPU.**
+
+**Guidance:** 6 is the default and the sweet spot; raising it past 8 buys essentially no extra
+speed and costs proportionally more CPU. If you're not on CPU at all (`device: cuda`/`mps`), this
+setting has no effect.
 
 ## ▶️ Running the Server
 

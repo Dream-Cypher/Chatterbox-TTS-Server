@@ -35,7 +35,7 @@ except ImportError:
     MULTILINGUAL_AVAILABLE = False
 
 # Import the singleton config_manager
-from config import config_manager
+from config import config_manager, get_cpu_threads
 
 logger = logging.getLogger(__name__)
 
@@ -391,6 +391,21 @@ def load_model() -> bool:
             f"BF16 optimization: {'enabled' if BF16_ENABLED else 'disabled'} "
             f"(TTS_BF16={os.environ.get('TTS_BF16', 'off')})"
         )
+
+        # CPU thread count: torch defaults to every physical core (24 on this
+        # machine), which pegs the CPU and spins fans for no speed benefit past
+        # ~8 threads. 0 (unset/invalid) means leave torch's default alone.
+        cpu_threads = get_cpu_threads()
+        if cpu_threads > 0:
+            torch.set_num_threads(cpu_threads)
+            logger.info(
+                f"torch.set_num_threads({cpu_threads}) applied (tts_engine.cpu_threads)."
+            )
+        else:
+            logger.info(
+                "tts_engine.cpu_threads=0 (or unset/invalid) - leaving torch's default "
+                f"CPU thread count unchanged (currently {torch.get_num_threads()})."
+            )
 
         # Get the model selector from config
         model_selector = config_manager.get_string("model.repo_id", "chatterbox-turbo")

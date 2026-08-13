@@ -16,6 +16,11 @@ model:
   t3_model: ""
 tts_engine:
   device: auto
+  # torch CPU thread count for inference. 0 = leave torch's default (all
+  # physical cores) alone. Measured (Nano + cloning, CPU): speed plateaus
+  # ~8 threads while CPU cost keeps climbing, so 6 threads ran 14% FASTER
+  # than torch's 24-thread default while burning 4x less CPU.
+  cpu_threads: 6
   predefined_voices_path: voices
   reference_audio_path: reference_audio
   default_voice_id: Emily.wav

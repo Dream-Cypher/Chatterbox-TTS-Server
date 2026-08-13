@@ -1627,7 +1627,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!serverConfigForm || !currentConfig || Object.keys(currentConfig).length === 0) return;
         const fieldsToDisplay = {
             "server.host": currentConfig.server?.host, "server.port": currentConfig.server?.port,
-            "tts_engine.device": currentConfig.tts_engine?.device, "tts_engine.default_voice_id": currentConfig.tts_engine?.default_voice_id,
+            "tts_engine.device": currentConfig.tts_engine?.device, "tts_engine.cpu_threads": currentConfig.tts_engine?.cpu_threads,
+            "tts_engine.default_voice_id": currentConfig.tts_engine?.default_voice_id,
             "paths.model_cache": currentConfig.paths?.model_cache, "tts_engine.predefined_voices_path": currentConfig.tts_engine?.predefined_voices_path,
             "tts_engine.reference_audio_path": currentConfig.tts_engine?.reference_audio_path, "paths.output": currentConfig.paths?.output,
             "audio_output.format": currentConfig.audio_output?.format, "audio_output.sample_rate": currentConfig.audio_output?.sample_rate
@@ -1636,8 +1637,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             "audio_output.save_to_disk": currentConfig.audio_output?.save_to_disk
         };
         for (const name in fieldsToDisplay) {
-            // Match both <input> and <select> — tts_engine.device and audio_output.format are
-            // <select> elements, the rest are <input>.
+            // Match both <input> and <select> — tts_engine.device, tts_engine.cpu_threads, and
+            // audio_output.format are <select> elements, the rest are <input>.
             const input = serverConfigForm.querySelector(`[name="${name}"]`);
             if (input) {
                 input.value = fieldsToDisplay[name] !== undefined ? fieldsToDisplay[name] : '';
@@ -1719,6 +1720,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                         let value = input.value;
                         if (input.type === 'number') value = parseFloat(value) || 0;
                         else if (input.type === 'checkbox') value = input.checked;
+                        else if (input.name === 'tts_engine.cpu_threads') value = parseInt(value, 10) || 0;
                         currentLevel[key] = value;
                     } else { currentLevel[key] = currentLevel[key] || {}; currentLevel = currentLevel[key]; }
                 });
